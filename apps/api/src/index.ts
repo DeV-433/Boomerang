@@ -1,2 +1,1 @@
-// Fastify web service: webhooks and dashboard API.
-export {};
+export { buildApp, type AppDeps } from "./app";

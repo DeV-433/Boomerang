@@ -7,6 +7,14 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
     "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "fastify": "5.12.8",
+    "@boomerang/core": "*",
+    "@boomerang/db": "*",
+    "@boomerang/paypal": "*"
   }
 }

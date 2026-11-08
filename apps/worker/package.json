@@ -7,6 +7,12 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "dev": "tsx watch src/worker.ts",
+    "start": "tsx src/worker.ts",
     "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@boomerang/core": "*",
+    "@boomerang/db": "*"
   }
 }
