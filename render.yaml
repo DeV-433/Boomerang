@@ -1,0 +1,90 @@
+# Render Blueprint for Boomerang (BUILD_PLAN step 1.11).
+# Field names checked against https://render.com/docs/blueprint-spec on 2026-11-09.
+#
+# Secrets use `sync: false`: Render asks for them once when the Blueprint is first created,
+# and they never live in this repository.
+
+databases:
+  - name: boomerang-db
+    plan: 0.1c-256mb
+    region: singapore
+    postgresMajorVersion: "17"
+    databaseName: boomerang
+    user: boomerang
+
+services:
+  # Webhook receiver, dashboard API and health check. Always-on paid plan so no webhook is missed.
+  - type: web
+    name: boomerang-api
+    runtime: node
+    plan: 0.5c-512mb
+    region: singapore
+    buildCommand: npm ci --include=dev
+    preDeployCommand: npm run db:migrate
+    startCommand: npm run start -w @boomerang/api
+    healthCheckPath: /healthz
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: boomerang-db
+          property: connectionString
+      - key: PAYPAL_ENVIRONMENT
+        value: SANDBOX
+      - key: POLICY_MODE
+        value: dry_run
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: PAYPAL_SANDBOX_MERCHANT_EMAIL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: PAY_LINK_SECRET
+        sync: false
+      - key: SIM_WEBHOOK_SECRET
+        sync: false
+
+  # Overdue poller and follow-up scheduler: a long-running worker, because cron is too coarse for timers.
+  - type: worker
+    name: boomerang-worker
+    runtime: node
+    plan: 0.5c-512mb
+    region: singapore
+    buildCommand: npm ci --include=dev
+    startCommand: npm run start -w @boomerang/worker
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: boomerang-db
+          property: connectionString
+      - key: PAYPAL_ENVIRONMENT
+        value: SANDBOX
+      - key: POLICY_MODE
+        value: dry_run
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+
+  # Operator dashboard (placeholder until step 6.1).
+  - type: web
+    name: boomerang-dashboard
+    runtime: static
+    buildCommand: npm ci --include=dev && npm run build -w @boomerang/dashboard
+    staticPublishPath: ./apps/dashboard/dist
+    autoDeployTrigger: checksPass
