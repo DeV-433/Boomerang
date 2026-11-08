@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.base.json",
+  "include": [
+    "apps/api/src",
+    "apps/api/test",
+    "apps/worker/src",
+    "apps/worker/test",
+    "packages/*/src",
+    "packages/*/test",
+    "packages/*/*.config.ts",
+    "sim/src",
+    "sim/test"
+  ]
+}

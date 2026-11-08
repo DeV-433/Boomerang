@@ -1,0 +1,36 @@
+{
+  "name": "boomerang",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "sim"
+  ],
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "npm run test --workspaces --if-present",
+    "ci": "npm run lint && npm run typecheck && npm test",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "db:generate": "npm run generate -w @boomerang/db",
+    "db:migrate": "npm run migrate -w @boomerang/db",
+    "dev:api": "npm run dev -w @boomerang/api",
+    "dev:worker": "npm run dev -w @boomerang/worker"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.6.6",
+    "eslint": "10.14.0",
+    "globals": "17.14.0",
+    "prettier": "3.9.10",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1",
+    "vitest": "5.1.0"
+  }
+}
