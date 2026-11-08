@@ -23,7 +23,8 @@ services:
     preDeployCommand: npm run db:migrate
     startCommand: npm run start -w @boomerang/api
     healthCheckPath: /healthz
-    autoDeployTrigger: checksPass
+    # Switch to checksPass once GitHub Actions runs on this account.
+    autoDeployTrigger: commit
     envVars:
       - key: NODE_VERSION
         value: "24"
@@ -60,7 +61,8 @@ services:
     region: singapore
     buildCommand: npm ci --include=dev
     startCommand: npm run start -w @boomerang/worker
-    autoDeployTrigger: checksPass
+    # Switch to checksPass once GitHub Actions runs on this account.
+    autoDeployTrigger: commit
     envVars:
       - key: NODE_VERSION
         value: "24"
@@ -87,4 +89,5 @@ services:
     runtime: static
     buildCommand: npm ci --include=dev && npm run build -w @boomerang/dashboard
     staticPublishPath: ./apps/dashboard/dist
-    autoDeployTrigger: checksPass
+    # Switch to checksPass once GitHub Actions runs on this account.
+    autoDeployTrigger: commit
