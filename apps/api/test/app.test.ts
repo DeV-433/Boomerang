@@ -28,7 +28,8 @@ const signed = {
 
 function sampleEvent(id = `WH-${randomUUID()}`): string {
   // Spacing and key order kept as sent, to prove the raw bytes are stored untouched.
-  return `{"id":"${id}","event_type":"INVOICING.INVOICE.PAID","resource_type":"invoices",  "resource":{"id":"INV2-AAAA"}}`;
+  // Shape matches a real sandbox INVOICING.* event: the invoice is nested under resource.invoice.
+  return `{"id":"${id}","event_type":"INVOICING.INVOICE.PAID","resource_type":"invoices",  "resource":{"invoice":{"id":"INV2-AAAA"}}}`;
 }
 
 describe.skipIf(!hasTestDb)("api", () => {
@@ -99,6 +100,15 @@ describe.skipIf(!hasTestDb)("api", () => {
     const res = await failing.inject({ method: "POST", url: "/webhooks/paypal", headers: signed, payload: sampleEvent() });
     expect(res.statusCode).toBe(503);
     await failing.close();
+  });
+
+  it("reads the resource id from subscription-style events too", async () => {
+    const id = `WH-${randomUUID()}`;
+    const body = `{"id":"${id}","event_type":"BILLING.SUBSCRIPTION.PAYMENT.FAILED","resource_type":"subscription","resource":{"id":"I-SUB123"}}`;
+    const res = await app.inject({ method: "POST", url: "/webhooks/paypal", headers: signed, payload: body });
+    expect(res.statusCode).toBe(200);
+    const [row] = await h.db.select().from(events).where(eq(events.paypalEventId, id));
+    expect(row!.resourceId).toBe("I-SUB123");
   });
 
   // 1.10

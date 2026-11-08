@@ -18,10 +18,15 @@ interface PayPalEventEnvelope {
   id?: unknown;
   event_type?: unknown;
   resource_type?: unknown;
-  resource?: { id?: unknown };
+  resource?: { id?: unknown; invoice?: { id?: unknown } };
 }
 
 const str = (v: unknown): string | null => (typeof v === "string" && v.length > 0 ? v : null);
+
+/** Subscription and payment events carry the id at resource.id; invoicing events nest it under resource.invoice. */
+export function resourceIdOf(envelope: PayPalEventEnvelope): string | null {
+  return str(envelope.resource?.id) ?? str(envelope.resource?.invoice?.id);
+}
 
 /**
  * POST /webhooks/paypal
@@ -65,7 +70,7 @@ export async function webhookRoutes(app: FastifyInstance, deps: AppDeps): Promis
         paypalEventId: eventId,
         type: eventType,
         resourceType: str(envelope.resource_type),
-        resourceId: str(envelope.resource?.id),
+        resourceId: resourceIdOf(envelope),
         payload: envelope,
         rawBody,
         headers: storedHeaders(req),
