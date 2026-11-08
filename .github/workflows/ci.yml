@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: boomerang
+          POSTGRES_PASSWORD: boomerang
+          POSTGRES_DB: boomerang
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U boomerang"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CI: "true"
+      DATABASE_URL: postgres://boomerang:boomerang@localhost:5432/boomerang
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run db:migrate --if-present
+      - run: npm test
