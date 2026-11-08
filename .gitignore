@@ -1,0 +1,18 @@
+# Docs (kept local)
+Docs/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Dependencies and builds
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Logs and OS files
+*.log
+.DS_Store
