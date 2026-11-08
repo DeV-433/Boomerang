@@ -1,0 +1,45 @@
+import { z } from "zod";
+import { loadEnv } from "./env";
+
+const optionalString = z
+  .string()
+  .optional()
+  .transform((v) => (v && v.trim() !== "" ? v.trim() : undefined));
+
+const ConfigSchema = z.object({
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  PORT: z.coerce.number().int().positive().default(3000),
+  LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
+  DATABASE_URL: optionalString,
+  PAYPAL_CLIENT_ID: optionalString,
+  PAYPAL_CLIENT_SECRET: optionalString,
+  PAYPAL_WEBHOOK_ID: optionalString,
+  PAYPAL_ENVIRONMENT: z.enum(["SANDBOX", "PRODUCTION"]).default("SANDBOX"),
+  PAYPAL_SANDBOX_MERCHANT_EMAIL: optionalString,
+  PAYPAL_SANDBOX_CUSTOMER_EMAIL: optionalString,
+  GEMINI_API_KEY: optionalString,
+  POLICY_MODE: z.enum(["dry_run", "live"]).default("dry_run"),
+  PAY_LINK_SECRET: optionalString,
+  SIM_WEBHOOK_SECRET: optionalString,
+});
+
+export type Config = z.infer<typeof ConfigSchema>;
+
+/** Parses configuration from the environment. Pass `env` explicitly in tests. */
+export function loadConfig(env: NodeJS.ProcessEnv = (loadEnv(), process.env)): Config {
+  const parsed = ConfigSchema.safeParse(env);
+  if (!parsed.success) {
+    const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+    throw new Error(`Invalid configuration: ${issues}`);
+  }
+  return parsed.data;
+}
+
+/** Returns the value of a config key, or throws a clear error naming the missing variable. */
+export function requireConfig<K extends keyof Config>(config: Config, key: K): NonNullable<Config[K]> {
+  const value = config[key];
+  if (value === undefined || value === null) {
+    throw new Error(`Missing required environment variable ${String(key)}`);
+  }
+  return value as NonNullable<Config[K]>;
+}

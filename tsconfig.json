@@ -8,6 +8,7 @@
     "packages/*/src",
     "packages/*/test",
     "packages/*/*.config.ts",
+    "packages/*/scripts",
     "sim/src",
     "sim/test"
   ]
