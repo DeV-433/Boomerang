@@ -105,3 +105,263 @@ h1 {
 .badge-bad {
   color: var(--bad);
 }
+
+/* Chart and figure tokens (dataviz reference palette, blue ramp). */
+:root {
+  --series-1: #2a78d6;
+  --series-1-track: #d6e4f7;
+  --surface-1: #fcfcfb;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --series-1: #3987e5;
+    --series-1-track: #22344d;
+    --surface-1: #1a1a19;
+  }
+}
+h2 {
+  font-size: 16px;
+  margin: 0;
+}
+h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 20px 0 8px;
+}
+.link-button {
+  background: none;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 4px;
+}
+.link-button:hover {
+  color: var(--text);
+}
+.error {
+  color: var(--bad);
+}
+.note {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 12px 0 0;
+}
+.signin {
+  max-width: 380px;
+  margin: 48px auto;
+}
+.signin form {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+input,
+select,
+textarea,
+button {
+  font: inherit;
+  color: var(--text);
+}
+input,
+select,
+textarea {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+button {
+  border-radius: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+}
+button[type="submit"],
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.page-head h1 {
+  margin: 0;
+}
+.chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.chip {
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 8px;
+  color: var(--muted);
+  background: var(--surface);
+}
+.chip-warn {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.card-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.picker {
+  font-size: 12px;
+  color: var(--muted);
+  max-width: 100%;
+}
+.picker select {
+  max-width: 100%;
+}
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.tile {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--surface);
+}
+.tile-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+.tile-value {
+  font-size: 22px;
+  font-weight: 600;
+}
+.tile-hero .tile-value {
+  font-size: 36px;
+}
+.tile-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+.meters {
+  display: grid;
+  gap: 10px;
+}
+.meter-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 220px) 1fr 190px;
+  align-items: center;
+  gap: 12px;
+}
+.meter-name {
+  font-size: 13px;
+}
+.meter-track {
+  height: 16px;
+  background: var(--series-1-track);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.meter-track:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.meter-fill {
+  height: 100%;
+  background: var(--series-1);
+  border-radius: 4px;
+}
+.meter-value {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.table-view {
+  margin-top: 16px;
+}
+.table-view summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+}
+table {
+  border-collapse: collapse;
+  margin-top: 8px;
+  width: 100%;
+  max-width: 640px;
+  font-size: 13px;
+}
+th,
+td {
+  text-align: left;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+}
+td {
+  font-variant-numeric: tabular-nums;
+}
+thead th {
+  color: var(--muted);
+  font-weight: 600;
+}
+@media (max-width: 640px) {
+  .content {
+    padding: 16px;
+  }
+  .card {
+    padding: 12px;
+  }
+  .meter-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .topbar {
+    gap: 4px 12px;
+    padding: 8px 16px;
+  }
+  .nav {
+    order: 3;
+    flex-basis: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .brand {
+    flex: 1;
+  }
+  .tile-hero .tile-value {
+    font-size: 28px;
+  }
+}
+.tile-value {
+  white-space: nowrap;
+}
+body {
+  overflow-x: hidden;
+}
+.summary,
+.card {
+  min-width: 0;
+}
