@@ -26,6 +26,7 @@ Decisions that differ from the text of this plan:
 | Sandbox customers | PayPal blocks invoices to recipients inside India. Seeded invoices go to US `example.com` addresses; the sandbox *customer* account is a US personal account. |
 | Diagnosis (4.5) | "Viewed but unpaid" is not observable (PayPal's API does not report invoice views), so the invoice lane uses `overdue_unresponsive` ("contacted, no reply"). |
 | Who the loop works | Never control-arm cases. A seeded batch's treatment cases only after `startBatch` (no batch has been started yet). Organic cases (not in a batch) are worked as soon as they open. |
+| Live run (verified 2026-11-09) | The Render worker in `live` mode worked organic invoice INV2-4CYP-PW8D-P9Q7-YJYF ($40): held at 12:02 UTC (07:00 in New York, outside contact hours), re-checked at 15:00 UTC, agent proposed `send_reminder`, gate allowed, `cancel_invoice_auto_reminder` and `send_invoice_reminder` succeeded first try; audit trail complete; next check 2026-11-12. The decision came from the 20B fallback because a simulation was using 120B's per-minute budget on the same key; use a separate key for simulations. |
 | Locks | Any transaction that locks rows and writes audit must use `auditedTransaction` (takes the chain lock first); mixing orders deadlocks. |
 
 Facts found while building that later steps depend on:
@@ -109,7 +110,7 @@ No cut line: every phase is in scope (decided 2026-11-09, step 0.7).
 - [x] **1.9 [M]** Signature verification using PayPal's webhook verification (needs the webhook ID). *Done when:* a valid test event passes and a tampered one returns 400.
 - [x] **1.10 [M]** Deduplicate by `paypal_event_id`. *Done when:* posting the same event twice stores one row.
 - [x] **1.11 [M]** Write `render.yaml` for API, worker, dashboard and database. *Done when:* Render accepts the Blueprint (check field names against Render's current spec).
-- [x] **1.12 [M]** Deploy to Render with secrets set in the dashboard, not in the repository. Variables: `DATABASE_URL` (from Render), `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID`, `PAYPAL_ENVIRONMENT=SANDBOX`, `GEMINI_API_KEY`, `POLICY_MODE` (`dry_run` or `live`), and a signing secret for pay-page links. Use an always-on plan so webhooks are not missed, and confirm the Postgres plan's expiry terms. *Done when:* `/healthz` works on the public URL.
+- [x] **1.12 [M]** Deploy to Render with secrets set in the dashboard, not in the repository. Variables: `DATABASE_URL` (from Render), `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID`, `PAYPAL_ENVIRONMENT=SANDBOX`, `GROQ_API_KEY` (was `GEMINI_API_KEY`), `POLICY_MODE` (`dry_run` or `live`), and a signing secret for pay-page links. Use an always-on plan so webhooks are not missed, and confirm the Postgres plan's expiry terms. *Done when:* `/healthz` works on the public URL.
 - [x] **1.13 [M]** Register the public URL as a webhook endpoint in the PayPal dashboard; subscribe to the subscription and invoicing events. *Done when:* a sandbox action (for example, creating an invoice) produces a stored event on the deployed API. **CP1.**
 
 ---
