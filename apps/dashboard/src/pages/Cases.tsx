@@ -14,6 +14,7 @@ import { api } from "../api";
 import { casesCall, NONE } from "../casesQuery";
 import { dateTime, money } from "../format";
 import { setupGrid, useGridTheme } from "../grid";
+import { LiveBadge, useLiveGrid } from "../live";
 
 setupGrid();
 
@@ -81,6 +82,7 @@ export function Cases() {
   const theme = useGridTheme();
   const navigate = useNavigate();
   const gridApi = useRef<GridApi | null>(null);
+  const lastRefresh = useLiveGrid(gridApi);
   const [q, setQ] = useState("");
   const [openOnly, setOpenOnly] = useState(false);
   const [total, setTotal] = useState<number | null>(null);
@@ -228,6 +230,7 @@ export function Cases() {
       <div className="page-head">
         <h1>Cases</h1>
         <span className="muted">{total === null ? "" : `${total.toLocaleString()} matching`}</span>
+        <LiveBadge last={lastRefresh} />
       </div>
       <div className="toolbar">
         <input

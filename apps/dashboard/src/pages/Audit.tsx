@@ -12,6 +12,7 @@ import type { AuditEntry, AuditListResponse, AuditListRow, CaseAuditResponse } f
 import { api } from "../api";
 import { describeEntry } from "../auditText";
 import { setupGrid, useGridTheme } from "../grid";
+import { LiveBadge, useLiveGrid } from "../live";
 
 setupGrid();
 
@@ -54,6 +55,7 @@ export function Audit() {
   const [params, setParams] = useSearchParams();
   const caseFilter = params.get("case");
   const gridApi = useRef<GridApi<AuditListRow> | null>(null);
+  const lastRefresh = useLiveGrid(gridApi);
   const [q, setQ] = useState("");
   const [total, setTotal] = useState<number | null>(null);
   const extra = useRef<{ q: string; caseId: string | null }>({ q: "", caseId: caseFilter });
@@ -145,6 +147,7 @@ export function Audit() {
       <div className="page-head">
         <h1>Audit</h1>
         <span className="muted">{total === null ? "" : `${total.toLocaleString()} entries`}</span>
+        <LiveBadge last={lastRefresh} />
         {caseFilter && (
           <span className="chip">
             One case only{" "}
