@@ -8,6 +8,15 @@ export const AUDIT_CHAIN_LOCK = 727_002;
 
 /** JSON with object keys sorted at every level, so jsonb's key reordering never changes a hash. */
 export function canonicalJson(value: unknown): string {
+  // Values with toJSON (a Date) hash as what jsonb stores (its ISO string). Before 2026-11-10 a Date
+  // hashed as {} because it has no own keys; see LEGACY_DATE_HASH_BEFORE in packages/audit.
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    typeof (value as { toJSON?: unknown }).toJSON === "function"
+  ) {
+    return canonicalJson((value as { toJSON: () => unknown }).toJSON());
+  }
   if (value === null || typeof value !== "object") return JSON.stringify(value ?? null);
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   const entries = Object.entries(value as Record<string, unknown>)
@@ -57,7 +66,15 @@ export async function appendAuditEntry(
   const hash = computeAuditHash(prevHash, full);
   const [row] = await tx
     .insert(auditLog)
-    .values({ caseId: entry.caseId, at, actor: entry.actor, kind: entry.kind, data: entry.data ?? {}, prevHash, hash })
+    .values({
+      caseId: entry.caseId,
+      at,
+      actor: entry.actor,
+      kind: entry.kind,
+      data: entry.data ?? {},
+      prevHash,
+      hash,
+    })
     .returning({ id: auditLog.id });
   return { id: row!.id, hash, prevHash };
 }

@@ -31,8 +31,12 @@ type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
  * Step 4.2: writes hash-chained audit entries. Pure code: this package may never import the model
  * SDK or PayPal (enforced by lint). Pass a transaction so the entry commits with the change it records.
  */
-export async function writeAudit(tx: Tx | Database, input: AuditInput): Promise<{ id: number; hash: string }> {
-  if (!(AUDIT_KINDS as readonly string[]).includes(input.kind)) throw new Error(`unknown audit kind: ${input.kind}`);
+export async function writeAudit(
+  tx: Tx | Database,
+  input: AuditInput,
+): Promise<{ id: number; hash: string }> {
+  if (!(AUDIT_KINDS as readonly string[]).includes(input.kind))
+    throw new Error(`unknown audit kind: ${input.kind}`);
   const run = (t: Tx | Database) => appendAuditEntry(t, input);
   // appendAuditEntry needs a transaction for its advisory lock; open one if the caller did not.
   return "transaction" in tx && typeof (tx as Database).transaction === "function" && !("rollback" in tx)
