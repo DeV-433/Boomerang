@@ -15,13 +15,17 @@ describe("simulator config (3.1)", () => {
   });
 
   it("rejects a response row whose probabilities exceed 1", () => {
-    const bad = structuredClone(config) as unknown as { responses: Record<string, Record<string, Record<string, number>>> };
+    const bad = structuredClone(config) as unknown as {
+      responses: Record<string, Record<string, Record<string, number>>>;
+    };
     bad.responses.slow_payer!.default = { pay: 0.7, promise: 0.3, dispute: 0.1, optOut: 0 };
     expect(() => parseSimConfig(bad)).toThrow(/sum to at most 1/);
   });
 
   it("rejects a type mix that does not sum to 1", () => {
-    expect(() => withOverrides(config, (c) => (c.batch.typeMix.invoice.slow_payer = 0.9))).toThrow(/typeMix.invoice/);
+    expect(() => withOverrides(config, (c) => (c.batch.typeMix.invoice.slow_payer = 0.9))).toThrow(
+      /typeMix.invoice/,
+    );
   });
 
   it("supports overrides without touching the original", () => {

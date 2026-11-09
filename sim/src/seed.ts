@@ -45,7 +45,12 @@ async function pool<T>(items: readonly T[], limit: number, fn: (item: T) => Prom
 }
 
 /** Creates a real, backdated, sent sandbox invoice and returns its id. Idempotent per seed and index. */
-async function createSandboxInvoice(gateway: PayPalGateway, merchantEmail: string, planned: PlannedCase, seed: string): Promise<string> {
+async function createSandboxInvoice(
+  gateway: PayPalGateway,
+  merchantEmail: string,
+  planned: PlannedCase,
+  seed: string,
+): Promise<string> {
   const inv = planned.invoice!;
   const key = `seed:${seed}:${planned.profile.batchIndex}`;
   const created = await gateway.callRest<{ id?: string; href?: string }>(
@@ -69,18 +74,35 @@ async function createSandboxInvoice(gateway: PayPalGateway, merchantEmail: strin
               name: { full_name: planned.customer.name },
               email_address: planned.customer.email,
               // PayPal blocks invoices to recipients inside India, so seeded customers are US-addressed.
-              address: { address_line_1: "1 Main St", admin_area_2: "San Jose", admin_area_1: "CA", postal_code: "95131", country_code: "US" },
+              address: {
+                address_line_1: "1 Main St",
+                admin_area_2: "San Jose",
+                admin_area_1: "CA",
+                postal_code: "95131",
+                country_code: "US",
+              },
             },
           },
         ],
-        items: [{ name: inv.description, quantity: "1", unit_amount: { currency_code: planned.currency, value: (planned.amountCents / 100).toFixed(2) } }],
+        items: [
+          {
+            name: inv.description,
+            quantity: "1",
+            unit_amount: { currency_code: planned.currency, value: (planned.amountCents / 100).toFixed(2) },
+          },
+        ],
       },
     },
     { idempotencyKey: `${key}:create` },
   );
   const invoiceId = created.data.id ?? created.data.href?.split("/").pop();
   if (!invoiceId) throw new Error(`PayPal returned no invoice id for ${key}`);
-  await gateway.callTool("seeder", "send_invoice", { invoice_id: invoiceId, send_to_recipient: true }, { idempotencyKey: `${key}:send` });
+  await gateway.callTool(
+    "seeder",
+    "send_invoice",
+    { invoice_id: invoiceId, send_to_recipient: true },
+    { idempotencyKey: `${key}:send` },
+  );
   return invoiceId;
 }
 
@@ -95,7 +117,8 @@ function offlineInvoiceId(seed: string, index: number): string {
  */
 export async function seedBatch(o: SeedOptions): Promise<SeedSummary> {
   const size = o.size ?? o.config.batch.size;
-  if (o.mode === "sandbox" && (!o.gateway || !o.merchantEmail)) throw new Error("sandbox mode needs a PayPal gateway and merchant email");
+  if (o.mode === "sandbox" && (!o.gateway || !o.merchantEmail))
+    throw new Error("sandbox mode needs a PayPal gateway and merchant email");
   const plan = planBatch(o.config, o.seed, size, o.now);
   const { db } = o;
 
@@ -123,11 +146,20 @@ export async function seedBatch(o: SeedOptions): Promise<SeedSummary> {
   const invoicePlans = plan.cases.filter((c) => c.profile.lane === "invoice");
   let done = 0;
   await pool(invoicePlans, o.concurrency ?? 4, async (p) => {
-    const invoiceId = o.mode === "sandbox" ? await createSandboxInvoice(o.gateway!, o.merchantEmail!, p, o.seed) : offlineInvoiceId(o.seed, p.profile.batchIndex);
+    const invoiceId =
+      o.mode === "sandbox"
+        ? await createSandboxInvoice(o.gateway!, o.merchantEmail!, p, o.seed)
+        : offlineInvoiceId(o.seed, p.profile.batchIndex);
     await db.transaction(async (tx) => {
       const [customer] = await tx
         .insert(customers)
-        .values({ paypalPayerRef: p.customer.payerRef, email: p.customer.email, name: p.customer.name, timezone: p.customer.timezone, simulated: true })
+        .values({
+          paypalPayerRef: p.customer.payerRef,
+          email: p.customer.email,
+          name: p.customer.name,
+          timezone: p.customer.timezone,
+          simulated: true,
+        })
         .onConflictDoUpdate({ target: customers.paypalPayerRef, set: { timezone: p.customer.timezone } })
         .returning({ id: customers.id });
       await tx
@@ -142,7 +174,10 @@ export async function seedBatch(o: SeedOptions): Promise<SeedSummary> {
           simulated: o.mode === "offline",
         })
         .onConflictDoNothing();
-      const [row] = await tx.select({ id: cases.id }).from(cases).where(and(eq(cases.lane, "invoice"), eq(cases.paypalRef, invoiceId), isNull(cases.closedAt)));
+      const [row] = await tx
+        .select({ id: cases.id })
+        .from(cases)
+        .where(and(eq(cases.lane, "invoice"), eq(cases.paypalRef, invoiceId), isNull(cases.closedAt)));
       await tx.insert(simProfiles).values(profileValues(row!.id, p)).onConflictDoNothing();
     });
     if (++done % 25 === 0) o.logger?.info({ done, of: invoicePlans.length }, "invoices seeded");
@@ -157,7 +192,16 @@ export async function seedBatch(o: SeedOptions): Promise<SeedSummary> {
   const subRows = await db
     .select({ id: cases.id, paypalRef: cases.paypalRef })
     .from(cases)
-    .where(and(eq(cases.lane, "subscription"), inArray(cases.paypalRef, subPlans.map((p) => p.subscription!.id)), isNull(cases.closedAt)));
+    .where(
+      and(
+        eq(cases.lane, "subscription"),
+        inArray(
+          cases.paypalRef,
+          subPlans.map((p) => p.subscription!.id),
+        ),
+        isNull(cases.closedAt),
+      ),
+    );
   const byRef = new Map(subRows.map((r) => [r.paypalRef, r.id]));
   for (const p of subPlans) {
     const caseId = byRef.get(p.subscription!.id);
@@ -174,7 +218,11 @@ export async function seedBatch(o: SeedOptions): Promise<SeedSummary> {
   const arms = assignArms(batchCases, o.seed);
   for (const arm of ["control", "treatment"] as const) {
     const ids = batchCases.filter((c) => arms.get(c.id) === arm).map((c) => c.id);
-    if (ids.length) await db.update(cases).set({ experimentGroup: arm, updatedAt: sql`now()` }).where(inArray(cases.id, ids));
+    if (ids.length)
+      await db
+        .update(cases)
+        .set({ experimentGroup: arm, updatedAt: sql`now()` })
+        .where(inArray(cases.id, ids));
   }
 
   const count = (arm: string) => batchCases.filter((c) => arms.get(c.id) === arm).length;

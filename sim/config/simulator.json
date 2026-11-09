@@ -24,8 +24,20 @@
     "subscriptionPrices": [9.99, 19, 29, 49, 99, 199, 299],
     "subscriptionPriceWeights": [0.22, 0.2, 0.18, 0.15, 0.13, 0.08, 0.04],
     "invoiceDaysOverdue": { "min": 3, "max": 40 },
-    "softFailureShare": { "would_pay_after_nudge": 0.85, "slow_payer": 0.5, "disputer": 0.5, "opts_out": 0.6 },
-    "timezones": ["America/New_York", "America/Chicago", "America/Los_Angeles", "Europe/London", "Asia/Kolkata", null]
+    "softFailureShare": {
+      "would_pay_after_nudge": 0.85,
+      "slow_payer": 0.5,
+      "disputer": 0.5,
+      "opts_out": 0.6
+    },
+    "timezones": [
+      "America/New_York",
+      "America/Chicago",
+      "America/Los_Angeles",
+      "Europe/London",
+      "Asia/Kolkata",
+      null
+    ]
   },
   "responses": {
     "would_pay_after_nudge": {

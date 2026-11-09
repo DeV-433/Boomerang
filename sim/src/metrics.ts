@@ -41,7 +41,10 @@ export function computeMetrics(results: readonly CaseResult[]): ArmMetrics {
     contactsPerRecoveredDollar: recoveredCents === 0 ? null : contacts / (recoveredCents / 100),
     medianDaysToRecovery: median(recoveredDays),
     disputes: results.filter((r) => r.outcome === "disputed").length,
-    optOuts: results.filter((r) => r.outcome === "opted_out" || r.timeline.some((t) => t.event === "contact" && t.outcome === "opt_out")).length,
+    optOuts: results.filter(
+      (r) =>
+        r.outcome === "opted_out" || r.timeline.some((t) => t.event === "contact" && t.outcome === "opt_out"),
+    ).length,
     contactsAfterOptOut: results.reduce((s, r) => s + r.contactsAfterOptOut, 0),
   };
 }
@@ -62,5 +65,7 @@ export function compareArms(control: readonly CaseResult[], treatment: readonly 
 /** Same metrics split by lane, for the dashboard. */
 export function metricsByLane(results: readonly CaseResult[]): Record<string, ArmMetrics> {
   const lanes = [...new Set(results.map((r) => r.lane))];
-  return Object.fromEntries(lanes.map((lane) => [lane, computeMetrics(results.filter((r) => r.lane === lane))]));
+  return Object.fromEntries(
+    lanes.map((lane) => [lane, computeMetrics(results.filter((r) => r.lane === lane))]),
+  );
 }

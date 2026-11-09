@@ -10,7 +10,8 @@ const config = loadSimConfig();
 function shares(type: CustomerType, contact: ContactKind, prior = 0, n = 6000): Record<Outcome, number> {
   const rng = new Rng("responder-test");
   const counts: Record<Outcome, number> = { pay: 0, promise: 0, ignore: 0, dispute: 0, opt_out: 0 };
-  for (let i = 0; i < n; i++) counts[respond(config, rng, type, contact, prior, [type, contact, i]).outcome]++;
+  for (let i = 0; i < n; i++)
+    counts[respond(config, rng, type, contact, prior, [type, contact, i]).outcome]++;
   return Object.fromEntries(Object.entries(counts).map(([k, v]) => [k, v / n])) as Record<Outcome, number>;
 }
 
@@ -51,8 +52,18 @@ describe("simulator responder (3.6)", () => {
 
   it("answers the same contact the same way every time", () => {
     const rng = new Rng("x");
-    const a = respond(config, rng, "promises_then_pays", "payment_plan_offer", 1, ["case-3", "contact", 4, 0]);
-    const b = respond(config, rng, "promises_then_pays", "payment_plan_offer", 1, ["case-3", "contact", 4, 0]);
+    const a = respond(config, rng, "promises_then_pays", "payment_plan_offer", 1, [
+      "case-3",
+      "contact",
+      4,
+      0,
+    ]);
+    const b = respond(config, rng, "promises_then_pays", "payment_plan_offer", 1, [
+      "case-3",
+      "contact",
+      4,
+      0,
+    ]);
     expect(a).toEqual(b);
   });
 

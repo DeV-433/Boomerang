@@ -1,5 +1,13 @@
 import { and, asc, desc, eq, sql } from "drizzle-orm";
-import { batches, cases, customers, simCaseResults, simProfiles, simRuns, type Database } from "@boomerang/db";
+import {
+  batches,
+  cases,
+  customers,
+  simCaseResults,
+  simProfiles,
+  simRuns,
+  type Database,
+} from "@boomerang/db";
 import type { SimConfig } from "./config";
 import type { CaseResult, SimCase } from "./engine";
 import type { ArmMetrics } from "./metrics";
@@ -15,7 +23,11 @@ export async function findBatch(db: Database, idOrLatest: string) {
 }
 
 /** The batch's cases with their hidden profiles, in generation order. Optionally one arm only. */
-export async function loadSimCases(db: Database, batchId: string, arm?: "control" | "treatment"): Promise<SimCase[]> {
+export async function loadSimCases(
+  db: Database,
+  batchId: string,
+  arm?: "control" | "treatment",
+): Promise<SimCase[]> {
   const rows = await db
     .select({
       caseId: cases.id,
@@ -43,7 +55,10 @@ export async function loadSimCases(db: Database, batchId: string, arm?: "control
       failureKind: (r.failureKind as "soft" | "hard" | null) ?? null,
     },
     // The reason code came from PayPal's failure event, so a merchant sees it too. Nothing else from `hidden` leaks.
-    visible: { reasonCode: (r.hidden as { reasonCode?: string | null }).reasonCode ?? null, timezone: r.timezone },
+    visible: {
+      reasonCode: (r.hidden as { reasonCode?: string | null }).reasonCode ?? null,
+      timezone: r.timezone,
+    },
   }));
 }
 
@@ -63,7 +78,14 @@ export async function saveRun(
   return db.transaction(async (tx) => {
     const [row] = await tx
       .insert(simRuns)
-      .values({ batchId: run.batchId, arm: run.arm, strategy: run.strategy, seed: run.seed, simConfig: run.config, metrics: run.metrics })
+      .values({
+        batchId: run.batchId,
+        arm: run.arm,
+        strategy: run.strategy,
+        seed: run.seed,
+        simConfig: run.config,
+        metrics: run.metrics,
+      })
       .returning({ id: simRuns.id });
     const runId = row!.id;
     for (let i = 0; i < run.results.length; i += 200) {
@@ -81,7 +103,10 @@ export async function saveRun(
         })),
       );
     }
-    await tx.update(simRuns).set({ finishedAt: sql`now()` }).where(eq(simRuns.id, runId));
+    await tx
+      .update(simRuns)
+      .set({ finishedAt: sql`now()` })
+      .where(eq(simRuns.id, runId));
     return runId;
   });
 }

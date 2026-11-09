@@ -2,12 +2,58 @@ import type { SimConfig } from "./config";
 import { Rng } from "./rng";
 import type { CustomerType, Lane, SimProfile } from "./types";
 
-const GIVEN = ["Ava", "Liam", "Maya", "Noah", "Zoe", "Ethan", "Priya", "Lucas", "Isla", "Omar", "Mei", "Jonas", "Sara", "Diego", "Nina", "Arjun"];
-const FAMILY = ["Patel", "Garcia", "Smith", "Chen", "Kim", "Okafor", "Novak", "Rossi", "Silva", "Khan", "Müller", "Brown", "Ito", "Haddad"];
-const COMPANIES = ["Studio", "Labs", "Supply Co", "Consulting", "Bakery", "Fitness", "Design", "Logistics", "Dental", "Media"];
+const GIVEN = [
+  "Ava",
+  "Liam",
+  "Maya",
+  "Noah",
+  "Zoe",
+  "Ethan",
+  "Priya",
+  "Lucas",
+  "Isla",
+  "Omar",
+  "Mei",
+  "Jonas",
+  "Sara",
+  "Diego",
+  "Nina",
+  "Arjun",
+];
+const FAMILY = [
+  "Patel",
+  "Garcia",
+  "Smith",
+  "Chen",
+  "Kim",
+  "Okafor",
+  "Novak",
+  "Rossi",
+  "Silva",
+  "Khan",
+  "Müller",
+  "Brown",
+  "Ito",
+  "Haddad",
+];
+const COMPANIES = [
+  "Studio",
+  "Labs",
+  "Supply Co",
+  "Consulting",
+  "Bakery",
+  "Fitness",
+  "Design",
+  "Logistics",
+  "Dental",
+  "Media",
+];
 
 /** PayPal reason codes for a failed subscription payment, by failure kind. */
-const REASON_CODES = { soft: ["INTERNAL_SERVER_ERROR", "SENDING_LIMIT_EXCEEDED"], hard: ["PAYER_CANNOT_PAY", "PAYMENT_DENIED"] } as const;
+const REASON_CODES = {
+  soft: ["INTERNAL_SERVER_ERROR", "SENDING_LIMIT_EXCEEDED"],
+  hard: ["PAYER_CANNOT_PAY", "PAYMENT_DENIED"],
+} as const;
 
 export interface PlannedCase {
   profile: SimProfile;
@@ -32,7 +78,12 @@ function isoDate(daysAgo: number, now: Date): string {
  * Step 3.3 (pure part): plans a batch from a seed. The same seed, size and config always give the
  * same plan; `now` only anchors invoice dates relative to the day of seeding.
  */
-export function planBatch(config: SimConfig, seed: string, size: number = config.batch.size, now: Date = new Date()): BatchPlan {
+export function planBatch(
+  config: SimConfig,
+  seed: string,
+  size: number = config.batch.size,
+  now: Date = new Date(),
+): BatchPlan {
   const rng = new Rng(seed);
   const cases: PlannedCase[] = [];
   for (let i = 0; i < size; i++) {
@@ -51,8 +102,16 @@ export function planBatch(config: SimConfig, seed: string, size: number = config
 
     if (lane === "invoice") {
       const a = config.batch.invoiceAmount;
-      const dollars = Math.min(a.maxDollars, Math.max(a.minDollars, a.medianDollars * Math.exp(a.spread * rng.normal("amount", i))));
-      const daysOverdue = rng.int(config.batch.invoiceDaysOverdue.min, config.batch.invoiceDaysOverdue.max, "overdue", i);
+      const dollars = Math.min(
+        a.maxDollars,
+        Math.max(a.minDollars, a.medianDollars * Math.exp(a.spread * rng.normal("amount", i))),
+      );
+      const daysOverdue = rng.int(
+        config.batch.invoiceDaysOverdue.min,
+        config.batch.invoiceDaysOverdue.max,
+        "overdue",
+        i,
+      );
       const termDays = rng.pick([14, 30, 45], "term", i);
       cases.push({
         profile: { batchIndex: i, lane, customerType, failureKind: null },
@@ -63,13 +122,27 @@ export function planBatch(config: SimConfig, seed: string, size: number = config
           invoiceDate: isoDate(daysOverdue + termDays, now),
           dueDate: isoDate(daysOverdue, now),
           daysOverdue,
-          description: rng.pick(["Consulting services", "Website maintenance", "Design work", "Monthly retainer", "Equipment rental", "Catering order"], "desc", i),
+          description: rng.pick(
+            [
+              "Consulting services",
+              "Website maintenance",
+              "Design work",
+              "Monthly retainer",
+              "Equipment rental",
+              "Catering order",
+            ],
+            "desc",
+            i,
+          ),
         },
       });
     } else {
       const share = config.batch.softFailureShare[customerType] ?? 0;
-      const failureKind = customerType === "needs_card_update" ? "hard" : rng.chance(share, "soft", i) ? "soft" : "hard";
-      const weights = Object.fromEntries(config.batch.subscriptionPrices.map((p, k) => [String(k), config.batch.subscriptionPriceWeights[k]!]));
+      const failureKind =
+        customerType === "needs_card_update" ? "hard" : rng.chance(share, "soft", i) ? "soft" : "hard";
+      const weights = Object.fromEntries(
+        config.batch.subscriptionPrices.map((p, k) => [String(k), config.batch.subscriptionPriceWeights[k]!]),
+      );
       const price = config.batch.subscriptionPrices[Number(rng.weighted(weights, "price", i))]!;
       const priceCents = Math.round(price * 100);
       cases.push({

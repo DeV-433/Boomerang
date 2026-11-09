@@ -10,7 +10,8 @@
     "seed": "tsx scripts/seed.ts",
     "baseline": "tsx scripts/baseline.ts",
     "test": "vitest run --passWithNoTests",
-    "treatment": "tsx scripts/treatment.ts"
+    "treatment": "tsx scripts/treatment.ts",
+    "replay": "tsx scripts/replay.ts"
   },
   "dependencies": {
     "seedrandom": "3.0.5",

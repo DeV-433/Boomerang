@@ -1,4 +1,11 @@
-import { diagnose, enabledTools, messageFacts, proposeByRules, type CaseSnapshot, type Proposer } from "@boomerang/cases";
+import {
+  diagnose,
+  enabledTools,
+  messageFacts,
+  proposeByRules,
+  type CaseSnapshot,
+  type Proposer,
+} from "@boomerang/cases";
 import { isContactAction, lintMessage, type Action, type Proposal } from "@boomerang/core";
 import { DEFAULT_POLICY, evaluateGate, type Policy } from "@boomerang/policy";
 import type { Strategy, StrategyView } from "./engine";
@@ -65,7 +72,14 @@ export function loopStrategy(options: {
   name: string;
   proposer: Proposer;
   policy?: Policy;
-}): Strategy & { stats: TreatmentStats; decide(view: StrategyView, st: CaseState, now: Date): Promise<{ contacts: ContactKind[]; recheckAt?: Date }> } {
+}): Strategy & {
+  stats: TreatmentStats;
+  decide(
+    view: StrategyView,
+    st: CaseState,
+    now: Date,
+  ): Promise<{ contacts: ContactKind[]; recheckAt?: Date }>;
+} {
   const policy = options.policy ?? { ...DEFAULT_POLICY, mode: "live" as const };
   const states = new Map<string, CaseState>();
   const stats: TreatmentStats = { escalated: 0, stopped: 0, heldForApproval: 0, gateBlocks: {} };
@@ -76,7 +90,13 @@ export function loopStrategy(options: {
     async contactsFor(view: StrategyView): Promise<ContactKind[]> {
       let st = states.get(view.caseId);
       if (!st) {
-        st = { nextCheckAt: SIM_EPOCH, ended: null, pendingApproval: null, seenObservations: 0, contactTimes: [] };
+        st = {
+          nextCheckAt: SIM_EPOCH,
+          ended: null,
+          pendingApproval: null,
+          seenObservations: 0,
+          contactTimes: [],
+        };
         states.set(view.caseId, st);
       }
       if (st.ended) return [];
@@ -101,7 +121,11 @@ export function loopStrategy(options: {
       }
       return [];
     },
-    async decide(view: StrategyView, st: CaseState, now: Date): Promise<{ contacts: ContactKind[]; recheckAt?: Date }> {
+    async decide(
+      view: StrategyView,
+      st: CaseState,
+      now: Date,
+    ): Promise<{ contacts: ContactKind[]; recheckAt?: Date }> {
       const snapshot = toSnapshot(view, now, st.contactTimes);
       const diagnosis = diagnose(snapshot, now);
       const proposal = await options.proposer(snapshot, diagnosis, now);
@@ -117,7 +141,9 @@ export function loopStrategy(options: {
         customerContactsLast7Days: snapshot.customerContactsLast7Days,
         lastContactAt: snapshot.lastContactAt,
         proposal,
-        messageLint: proposal.message ? lintMessage(proposal.message.body, messageFacts(snapshot)) : undefined,
+        messageLint: proposal.message
+          ? lintMessage(proposal.message.body, messageFacts(snapshot))
+          : undefined,
         redrafted: proposal.meta?.draft?.redrafted ?? false,
         approvedByHuman: approved,
         systemPaused: false,
@@ -125,7 +151,8 @@ export function loopStrategy(options: {
         policy,
         now,
       });
-      if (decision.verdict !== "allow") stats.gateBlocks[decision.decidedBy] = (stats.gateBlocks[decision.decidedBy] ?? 0) + 1;
+      if (decision.verdict !== "allow")
+        stats.gateBlocks[decision.decidedBy] = (stats.gateBlocks[decision.decidedBy] ?? 0) + 1;
 
       const effect = decision.effect;
       const end = (how: "escalated" | "stopped") => {
@@ -141,7 +168,8 @@ export function loopStrategy(options: {
           return end("stopped");
         case "retry_at":
         case "pause":
-          st.nextCheckAt = effect.kind === "retry_at" && effect.at > now ? effect.at : new Date(now.getTime() + H);
+          st.nextCheckAt =
+            effect.kind === "retry_at" && effect.at > now ? effect.at : new Date(now.getTime() + H);
           return { contacts: [], recheckAt: st.nextCheckAt };
         case "approval":
         case "redraft":
@@ -180,11 +208,19 @@ function toSnapshot(view: StrategyView, now: Date, contactTimes: Date[]): CaseSn
     contacts: view.contactsSoFar,
     lastContactAt: contactTimes.length ? contactTimes[contactTimes.length - 1]! : null,
     openedAt: SIM_EPOCH,
-    paypalStatus: view.lane === "invoice" ? "SENT" : view.observations.some((o) => o.kind === "suspended") ? "SUSPENDED" : "ACTIVE",
+    paypalStatus:
+      view.lane === "invoice"
+        ? "SENT"
+        : view.observations.some((o) => o.kind === "suspended")
+          ? "SUSPENDED"
+          : "ACTIVE",
     dueDate: null,
     failedPayments: lastFailure && lastFailure.kind === "payment_failed" ? lastFailure.failedPayments : 0,
     lastFailureReason: view.visible.reasonCode ?? null,
-    promiseDate: promise && promise.kind === "reply" && promise.promiseDay !== undefined ? isoDay(promise.promiseDay) : null,
+    promiseDate:
+      promise && promise.kind === "reply" && promise.promiseDay !== undefined
+        ? isoDay(promise.promiseDay)
+        : null,
     disputed: replies.some((o) => o.outcome === "dispute"),
     optedOut: replies.some((o) => o.outcome === "opt_out"),
     customerName: null,

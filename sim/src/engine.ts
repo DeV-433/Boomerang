@@ -63,7 +63,12 @@ export interface CaseResult {
  * plus whatever the strategy decides. Pure and deterministic: every random draw is keyed by the
  * case's batch index, the purpose and the day.
  */
-export async function simulateCase(config: SimConfig, rng: Rng, simCase: SimCase, strategy: Strategy): Promise<CaseResult> {
+export async function simulateCase(
+  config: SimConfig,
+  rng: Rng,
+  simCase: SimCase,
+  strategy: Strategy,
+): Promise<CaseResult> {
   const { profile } = simCase;
   const key = `case-${profile.batchIndex}`;
   const type = profile.customerType;
@@ -128,8 +133,18 @@ export async function simulateCase(config: SimConfig, rng: Rng, simCase: SimCase
     }
 
     // 2. PayPal's own behaviour (identical in both arms).
-    if (simCase.lane === "subscription" && !suspended && day > 0 && day % retry.intervalDays === 0 && day / retry.intervalDays <= retry.maxRetriesPerCycle) {
-      const p = cardFixed ? retry.afterCardUpdateSuccessProbability : profile.failureKind === "soft" ? retry.softSuccessProbability : 0;
+    if (
+      simCase.lane === "subscription" &&
+      !suspended &&
+      day > 0 &&
+      day % retry.intervalDays === 0 &&
+      day / retry.intervalDays <= retry.maxRetriesPerCycle
+    ) {
+      const p = cardFixed
+        ? retry.afterCardUpdateSuccessProbability
+        : profile.failureKind === "soft"
+          ? retry.softSuccessProbability
+          : 0;
       const success = !disputed && rng.chance(p, key, "paypal-retry", day);
       timeline.push({ day, event: "paypal_retry", success });
       if (success) {
@@ -138,7 +153,10 @@ export async function simulateCase(config: SimConfig, rng: Rng, simCase: SimCase
       }
       failedPayments++;
       observations.push({ day, kind: "payment_failed", failedPayments });
-      const notice = disputed || optedOut ? { outcome: "ignore" as const } : respond(config, rng, type, "paypal_failure_notice", customerContacts, [key, "notice", day]);
+      const notice =
+        disputed || optedOut
+          ? { outcome: "ignore" as const }
+          : respond(config, rng, type, "paypal_failure_notice", customerContacts, [key, "notice", day]);
       customerContacts++;
       timeline.push({ day, event: "paypal_failure_notice", outcome: notice.outcome });
       handleResponse(day, notice.outcome, notice);
@@ -171,7 +189,10 @@ export async function simulateCase(config: SimConfig, rng: Rng, simCase: SimCase
       lastContactDay = day;
       const afterOptOut = optedOut;
       if (afterOptOut) contactsAfterOptOut++;
-      const r = disputed || optedOut ? { outcome: "ignore" as const } : respond(config, rng, type, kind, customerContacts, [key, "contact", day, n]);
+      const r =
+        disputed || optedOut
+          ? { outcome: "ignore" as const }
+          : respond(config, rng, type, kind, customerContacts, [key, "contact", day, n]);
       customerContacts++;
       timeline.push({ day, event: "contact", kind, outcome: r.outcome, afterOptOut });
       handleResponse(day, r.outcome, r);
@@ -208,13 +229,16 @@ export async function simulateArm(
   const results: CaseResult[] = new Array(cases.length);
   let next = 0;
   let done = 0;
-  const workers = Array.from({ length: Math.max(1, Math.min(options.concurrency ?? 1, cases.length)) }, async () => {
-    while (next < cases.length) {
-      const i = next++;
-      results[i] = await simulateCase(config, rng, cases[i]!, strategy);
-      options.onCase?.(++done, cases.length);
-    }
-  });
+  const workers = Array.from(
+    { length: Math.max(1, Math.min(options.concurrency ?? 1, cases.length)) },
+    async () => {
+      while (next < cases.length) {
+        const i = next++;
+        results[i] = await simulateCase(config, rng, cases[i]!, strategy);
+        options.onCase?.(++done, cases.length);
+      }
+    },
+  );
   await Promise.all(workers);
   return results;
 }

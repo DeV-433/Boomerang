@@ -2,11 +2,18 @@ import { SIM_SIGNATURE_HEADER, signSimulatedEvent } from "@boomerang/core";
 import type { PlannedCase } from "./generate";
 
 /** Sends one signed simulated event; returns the HTTP status. Swappable so tests can use app.inject. */
-export type EventPoster = (rawBody: string, headers: Record<string, string>) => Promise<{ status: number; body: string }>;
+export type EventPoster = (
+  rawBody: string,
+  headers: Record<string, string>,
+) => Promise<{ status: number; body: string }>;
 
 export function httpPoster(apiUrl: string): EventPoster {
   return async (rawBody, headers) => {
-    const res = await fetch(`${apiUrl.replace(/\/$/, "")}/webhooks/simulated`, { method: "POST", headers, body: rawBody });
+    const res = await fetch(`${apiUrl.replace(/\/$/, "")}/webhooks/simulated`, {
+      method: "POST",
+      headers,
+      body: rawBody,
+    });
     return { status: res.status, body: await res.text() };
   };
 }
@@ -15,7 +22,11 @@ export function httpPoster(apiUrl: string): EventPoster {
  * Step 3.4: a BILLING.SUBSCRIPTION.PAYMENT.FAILED payload in PayPal's shape, for a subscription the
  * sandbox will not fail by itself. Marked simulated twice: the WH-SIM- id prefix and a flag.
  */
-export function subscriptionFailurePayload(planned: PlannedCase, seed: string, at: Date = new Date()): Record<string, unknown> {
+export function subscriptionFailurePayload(
+  planned: PlannedCase,
+  seed: string,
+  at: Date = new Date(),
+): Record<string, unknown> {
   const sub = planned.subscription;
   if (!sub) throw new Error("not a subscription case");
   const [given, ...rest] = planned.customer.name.split(" ");
@@ -55,7 +66,10 @@ export async function injectSubscriptionFailure(
 ): Promise<{ eventId: string; status: number }> {
   const payload = subscriptionFailurePayload(planned, seed, at);
   const rawBody = JSON.stringify(payload);
-  const res = await poster(rawBody, { "content-type": "application/json", [SIM_SIGNATURE_HEADER]: signSimulatedEvent(secret, rawBody) });
+  const res = await poster(rawBody, {
+    "content-type": "application/json",
+    [SIM_SIGNATURE_HEADER]: signSimulatedEvent(secret, rawBody),
+  });
   if (res.status !== 200) throw new Error(`simulated event rejected: HTTP ${res.status} ${res.body}`);
   return { eventId: payload.id as string, status: res.status };
 }

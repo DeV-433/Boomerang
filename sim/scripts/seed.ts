@@ -30,8 +30,12 @@ try {
     concurrency: Number(arg("concurrency", "4")),
     logger,
   });
-  console.log(`\nbatch ${summary.batchId} (${mode}) seeded in ${((Date.now() - started) / 1000).toFixed(0)}s`);
-  console.log(`  ${summary.invoices} invoice cases, ${summary.subscriptions} subscription cases, ${dollars(summary.atRiskCents)} at risk`);
+  console.log(
+    `\nbatch ${summary.batchId} (${mode}) seeded in ${((Date.now() - started) / 1000).toFixed(0)}s`,
+  );
+  console.log(
+    `  ${summary.invoices} invoice cases, ${summary.subscriptions} subscription cases, ${dollars(summary.atRiskCents)} at risk`,
+  );
   console.log(`  control ${summary.control}, treatment ${summary.treatment}`);
 } finally {
   await db.close();

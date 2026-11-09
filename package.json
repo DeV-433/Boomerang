@@ -25,7 +25,8 @@
     "prepare": "git config core.hooksPath .githooks || true",
     "sim:seed": "npm run seed -w @boomerang/sim --",
     "sim:baseline": "npm run baseline -w @boomerang/sim --",
-    "sim:treatment": "npm run treatment -w @boomerang/sim --"
+    "sim:treatment": "npm run treatment -w @boomerang/sim --",
+    "sim:replay": "npm run replay -w @boomerang/sim --"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -38,5 +39,9 @@
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.1",
     "vitest": "5.1.0"
+  },
+  "dependencies": {
+    "@bryntum/scheduler-enterprise": "8.0.0",
+    "@bryntum/scheduler-react-enterprise": "8.0.0"
   }
 }

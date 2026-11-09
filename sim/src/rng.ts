@@ -29,7 +29,10 @@ export class Rng {
   }
 
   /** Picks a key of `weights` with probability proportional to its weight. */
-  weighted<K extends string>(weights: Record<K, number> | Partial<Record<K, number>>, ...keys: (string | number)[]): K {
+  weighted<K extends string>(
+    weights: Record<K, number> | Partial<Record<K, number>>,
+    ...keys: (string | number)[]
+  ): K {
     const entries = Object.entries(weights) as [K, number][];
     const total = entries.reduce((sum, [, w]) => sum + w, 0);
     let roll = this.draw(...keys) * total;
@@ -60,6 +63,9 @@ export class Rng {
   /** Random id made of uppercase letters and digits. */
   id(length: number, ...keys: (string | number)[]): string {
     const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    return Array.from({ length }, (_, i) => alphabet[Math.floor(this.draw(...keys, i) * alphabet.length)]).join("");
+    return Array.from(
+      { length },
+      (_, i) => alphabet[Math.floor(this.draw(...keys, i) * alphabet.length)],
+    ).join("");
   }
 }

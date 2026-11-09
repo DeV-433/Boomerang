@@ -23,8 +23,20 @@ describe("metrics (3.8), checked against hand calculations", () => {
   //   $300 disputed after 2 contacts
   //   $200 never paid after 4 contacts, 2 of them after opting out
   const results = [
-    result({ amountCents: 40_000, recoveredCents: 40_000, recoveredDay: 2, contacts: 1, outcome: "recovered" }),
-    result({ amountCents: 10_000, recoveredCents: 10_000, recoveredDay: 10, contacts: 3, outcome: "recovered" }),
+    result({
+      amountCents: 40_000,
+      recoveredCents: 40_000,
+      recoveredDay: 2,
+      contacts: 1,
+      outcome: "recovered",
+    }),
+    result({
+      amountCents: 10_000,
+      recoveredCents: 10_000,
+      recoveredDay: 10,
+      contacts: 3,
+      outcome: "recovered",
+    }),
     result({ amountCents: 30_000, contacts: 2, outcome: "disputed" }),
     result({ amountCents: 20_000, contacts: 4, contactsAfterOptOut: 2, outcome: "opted_out" }),
   ];

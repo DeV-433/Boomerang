@@ -41,7 +41,8 @@ describe.skipIf(!hasTestDb)("seeding a batch end to end (3.3 to 3.5, 3.7)", () =
     await h?.close();
   });
 
-  const seedIt = () => seedBatch({ db: h.db, config, seed, size: 60, mode: "offline", poster, simSecret: SECRET });
+  const seedIt = () =>
+    seedBatch({ db: h.db, config, seed, size: 60, mode: "offline", poster, simSecret: SECRET });
 
   it("creates every case with a hidden profile, opened through the API for subscriptions, split into two arms", async () => {
     const summary = await seedIt();
@@ -51,14 +52,22 @@ describe.skipIf(!hasTestDb)("seeding a batch end to end (3.3 to 3.5, 3.7)", () =
 
     const rows = await h.db.select().from(cases).where(eq(cases.batchId, summary.batchId));
     expect(rows).toHaveLength(60);
-    expect(rows.every((r) => r.experimentGroup === "control" || r.experimentGroup === "treatment")).toBe(true);
-    expect(await h.db.select().from(simProfiles).where(eq(simProfiles.batchId, summary.batchId))).toHaveLength(60);
+    expect(rows.every((r) => r.experimentGroup === "control" || r.experimentGroup === "treatment")).toBe(
+      true,
+    );
+    expect(
+      await h.db.select().from(simProfiles).where(eq(simProfiles.batchId, summary.batchId)),
+    ).toHaveLength(60);
 
     // Every subscription case came from a stored, simulated, processed event.
     const subCases = rows.filter((r) => r.lane === "subscription");
     for (const c of subCases) {
       const [event] = await h.db.select().from(events).where(eq(events.caseId, c.id));
-      expect(event).toMatchObject({ simulated: true, source: "simulated", type: "BILLING.SUBSCRIPTION.PAYMENT.FAILED" });
+      expect(event).toMatchObject({
+        simulated: true,
+        source: "simulated",
+        type: "BILLING.SUBSCRIPTION.PAYMENT.FAILED",
+      });
     }
   });
 
@@ -77,7 +86,15 @@ describe.skipIf(!hasTestDb)("seeding a batch end to end (3.3 to 3.5, 3.7)", () =
     const metrics = computeMetrics(results);
     expect(metrics.cases).toBe(control.length);
     expect(metrics.recoveredCents).toBeGreaterThan(0);
-    const runId = await saveRun(h.db, { batchId: batch.id, arm: "control", strategy: "baseline", seed: batch.seed, config: simConfig, results, metrics });
+    const runId = await saveRun(h.db, {
+      batchId: batch.id,
+      arm: "control",
+      strategy: "baseline",
+      seed: batch.seed,
+      config: simConfig,
+      results,
+      metrics,
+    });
     expect(runId).toMatch(/^[0-9a-f-]{36}$/);
   });
 });

@@ -59,12 +59,20 @@ export function respond(
     roll -= p[o];
   }
   if (outcome === "pay") {
-    return { outcome, payInDays: rng.int(config.payDelayDays.min, config.payDelayDays.max, ...drawKey, "pay-delay") };
+    return {
+      outcome,
+      payInDays: rng.int(config.payDelayDays.min, config.payDelayDays.max, ...drawKey, "pay-delay"),
+    };
   }
   if (outcome === "promise") {
     return {
       outcome,
-      promiseInDays: rng.int(config.promise.inDays.min, config.promise.inDays.max, ...drawKey, "promise-days"),
+      promiseInDays: rng.int(
+        config.promise.inDays.min,
+        config.promise.inDays.max,
+        ...drawKey,
+        "promise-days",
+      ),
       promiseKept: rng.chance(config.promise.keepProbability[type], ...drawKey, "promise-kept"),
     };
   }
