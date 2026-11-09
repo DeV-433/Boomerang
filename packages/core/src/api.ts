@@ -245,3 +245,73 @@ export interface SystemStatus {
   changedAt: string | null;
   mode: "dry_run" | "live";
 }
+
+// 7A: what-if ----------------------------------------------------------------------------------------
+
+/** Policy settings a what-if may change (validated server-side; unset keeps the current policy). */
+export interface WhatIfOverrides {
+  perCase?: number;
+  perCustomerPerWeek?: number;
+  minGapHours?: number;
+  approvalAmountCents?: number;
+  confidenceFloor?: number;
+  hoursStart?: number;
+  hoursEnd?: number;
+  contactDays?: number[];
+}
+
+export interface WhatIfMetrics {
+  cases: number;
+  atRiskCents: number;
+  recoveredCents: number;
+  recoveredCases: number;
+  recoveryRate: number;
+  contacts: number;
+  contactsAfterOptOut: number;
+  disputes: number;
+  optOuts: number;
+  escalated: number;
+  stopped: number;
+  heldForApproval: number;
+  medianDaysToRecovery: number | null;
+}
+
+export interface WhatIfInterval {
+  estimate: number;
+  low: number;
+  high: number;
+  level: number;
+  iterations: number;
+}
+
+export interface WhatIfResponse {
+  batch: { id: string; name: string; cases: number };
+  overrides: WhatIfOverrides;
+  base: WhatIfMetrics;
+  scenario: WhatIfMetrics;
+  diff: {
+    recoveredCents: { base: number; scenario: number; delta: number };
+    recoveryRate: { base: number; scenario: number; deltaPoints: number };
+    contacts: { base: number; scenario: number; delta: number };
+    escalations: { base: number; scenario: number; delta: number };
+    contactsAfterOptOut: { base: number; scenario: number; delta: number };
+    casesChanged: number;
+    casesNewlyRecovered: number;
+    casesNoLongerRecovered: number;
+  };
+  interval: { recoveredCents: WhatIfInterval; recoveryRatePoints: WhatIfInterval };
+  fingerprints: { base: string; scenario: string };
+  elapsedMs: number;
+}
+
+/** The policy a what-if starts from, so the screen can show current values next to the sliders. */
+export interface WhatIfDefaults {
+  perCase: number;
+  perCustomerPerWeek: number;
+  minGapHours: number;
+  approvalAmountCents: number;
+  confidenceFloor: number;
+  hoursStart: number;
+  hoursEnd: number;
+  contactDays: number[];
+}

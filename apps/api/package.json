@@ -16,6 +16,7 @@
     "@boomerang/core": "*",
     "@boomerang/db": "*",
     "@boomerang/paypal": "*",
+    "@boomerang/sim": "*",
     "@fastify/cors": "11.3.1",
     "drizzle-orm": "0.45.4",
     "fastify": "5.12.8",
