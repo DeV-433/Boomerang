@@ -61,8 +61,12 @@ export function isoDay(d: Date): string {
  * "Viewed but unpaid" from the documentation is not observable (PayPal's API does not report
  * invoice views), so the invoice lane uses "contacted, no reply" (overdue_unresponsive) instead.
  */
+/** A PayPal reason code is UPPER_SNAKE_CASE; anything else came from somewhere it should not have. */
+const reasonCode = (r: string | null) => (r && /^[A-Z][A-Z_]{2,48}$/.test(r) ? r : r ? "UNRECOGNISED_REASON" : null);
+
 export function diagnose(s: CaseSnapshot, now: Date): Diagnosis {
   const d = (cause: Cause, rule: string): Diagnosis => ({ cause, rule, method: "rules" });
+  const reason = reasonCode(s.lastFailureReason);
   const status = s.paypalStatus?.toUpperCase() ?? null;
 
   // Invoice statuses only: for a subscription, CANCELLED can still mean money owed (handled below).
@@ -77,9 +81,9 @@ export function diagnose(s: CaseSnapshot, now: Date): Diagnosis {
       return s.amountCents > 0 ? d("cancelled_with_balance", `subscription ${status} with balance owing`) : d("resolved", `subscription ${status}, nothing owed`);
     }
     if (status === "SUSPENDED" || s.failedPayments >= FAILURE_THRESHOLD) return d("threshold_reached", `suspended or ${s.failedPayments} failed payments`);
-    if (s.lastFailureReason && HARD_FAILURE_REASONS.includes(s.lastFailureReason)) return d("expired_funding_source", `hard failure ${s.lastFailureReason}`);
+    if (reason && HARD_FAILURE_REASONS.includes(reason)) return d("expired_funding_source", `hard failure ${reason}`);
     if (s.failedPayments >= 2) return d("expired_funding_source", "repeated failure after PayPal's retry");
-    return d("temporary_decline", `first failure${s.lastFailureReason ? ` (${s.lastFailureReason})` : ""}, may clear on PayPal's retry`);
+    return d("temporary_decline", `first failure${reason ? ` (${reason})` : ""}, may clear on PayPal's retry`);
   }
 
   if (s.promiseDate) {

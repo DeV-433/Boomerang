@@ -155,4 +155,23 @@ export interface Proposal {
   message?: { tone: Tone; template: string; subject?: string; body: string };
   nextCheckAfterHours: number;
   proposedBy: string;
+  /** Step 5.5: how the proposal was produced, recorded in the audit trail with it. */
+  meta?: ProposalMeta;
+}
+
+export interface ProposalMeta {
+  model?: string;
+  promptVersion?: string;
+  /** The exact structured input the model saw. */
+  input?: unknown;
+  /** Model calls made (1, or 2 after one retry). */
+  attempts?: number;
+  /** Validation errors from the attempts that were rejected. */
+  rejected?: string[][];
+  /** The cause the model returned, when it differed from the rules' diagnosis. */
+  modelCause?: string;
+  /** Set when the proposal came from the rules because the model could not be reached. */
+  fallback?: string;
+  draft?: { model: string; promptVersion: string; personalNote: string; redrafted: boolean; lintIssues?: string[] };
+  usage?: { inputTokens: number; outputTokens: number; thinkingTokens: number; costUsd: number };
 }

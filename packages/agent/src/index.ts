@@ -1,2 +1,21 @@
-// Gemini-backed decision, drafting and reply classification. The only package allowed to import the model SDK.
-export {};
+export { decide, agentProposer, classifyReply, templateFor, type AgentOptions, type Classification } from "./agent";
+export {
+  GeminiClient,
+  RecordingClient,
+  UsageMeter,
+  ModelCallError,
+  PRICES,
+  costUsd,
+  requestHash,
+  DECISION_MODEL,
+  DRAFT_MODEL,
+  CLASSIFY_MODEL,
+  type ModelClient,
+  type ModelRequest,
+  type ModelResponse,
+  type Usage,
+  type CallKind,
+} from "./model";
+export { validateDecision, decisionJsonSchema, DecisionSchema, REPLY_LABELS, type Decision, type ReplyLabel } from "./schema";
+export { buildCaseSummary, type CaseSummary } from "./summary";
+export { PROMPT_VERSION } from "./prompts";

@@ -9,3 +9,4 @@ export {
   type SimVerifyResult,
 } from "./simsign";
 export * from "./domain";
+export * from "./messages";

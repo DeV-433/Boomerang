@@ -1,6 +1,6 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { auditedTransaction, writeAudit } from "@boomerang/audit";
-import { isContactAction, isEndState, isWaitAction, type Action, type Lane, type Proposal } from "@boomerang/core";
+import { isContactAction, isEndState, isWaitAction, lintMessage, type Action, type Lane, type Proposal } from "@boomerang/core";
 import { actions, approvals, batches, cases, type Database } from "@boomerang/db";
 import type { PayPalGateway } from "@boomerang/paypal";
 import { TOOL_WHITELIST } from "@boomerang/paypal";
@@ -8,6 +8,7 @@ import { evaluateGate, type GateDecision, type Policy } from "@boomerang/policy"
 import type { Logger } from "@boomerang/core";
 import { diagnose, type CaseSnapshot, type Diagnosis } from "./diagnose";
 import { executeAction } from "./executor";
+import { messageFacts } from "./messages";
 import { proposeByRules } from "./propose";
 import { closeCase, isSystemPaused, loadPolicy, loadSnapshot, lockCase, scheduleCheck, setState, type Tx } from "./store";
 
@@ -75,7 +76,19 @@ export async function runCaseCheck(deps: LoopDeps, caseId: string): Promise<Chec
       caseId,
       actor: proposal.proposedBy,
       kind: "proposed",
-      data: { actionId, action: proposal.action, reason: proposal.reason, confidence: proposal.confidence, nextCheckAfterHours: proposal.nextCheckAfterHours, message: proposal.message ?? null },
+      data: {
+        actionId,
+        action: proposal.action,
+        reason: proposal.reason,
+        confidence: proposal.confidence,
+        nextCheckAfterHours: proposal.nextCheckAfterHours,
+        message: proposal.message ?? null,
+        // 5.5: model name, prompt version and the exact input snapshot (absent for rules).
+        model: proposal.meta?.model ?? null,
+        promptVersion: proposal.meta?.promptVersion ?? null,
+        inputSnapshot: proposal.meta?.input ?? null,
+        modelMeta: proposal.meta ? { attempts: proposal.meta.attempts, rejected: proposal.meta.rejected, modelCause: proposal.meta.modelCause, fallback: proposal.meta.fallback, draft: proposal.meta.draft, usage: proposal.meta.usage } : null,
+      },
       at: now,
     });
 
@@ -115,8 +128,9 @@ async function gate(tx: Tx, deps: LoopDeps, s: CaseSnapshot, proposal: Proposal,
     customerContactsLast7Days: s.customerContactsLast7Days,
     lastContactAt: s.lastContactAt,
     proposal,
-    // Rule-based messages come from approved templates; the model's drafts get the lint in 5.8.
-    messageLint: proposal.message ? { ok: true, issues: [] } : undefined,
+    // Every outgoing message is linted against the case's own facts (5.8), whoever drafted it.
+    messageLint: proposal.message ? lintMessage(proposal.message.body, messageFacts(s)) : undefined,
+    redrafted: proposal.meta?.draft?.redrafted ?? false,
     approvedByHuman,
     systemPaused: await isSystemPaused(tx),
     enabledTools: enabledTools(s.lane),

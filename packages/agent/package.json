@@ -8,5 +8,13 @@
   },
   "scripts": {
     "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@google/genai": "3.0.0",
+    "@boomerang/core": "*",
+    "@boomerang/cases": "*",
+    "@boomerang/db": "*",
+    "drizzle-orm": "0.45.4",
+    "zod": "4.6.7"
   }
 }

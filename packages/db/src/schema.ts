@@ -346,3 +346,32 @@ export const systemState = pgTable("system_state", {
   pausedBy: text("paused_by"),
   changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// 5.5 and 5.11: every model call, for the audit trail, cost tracking and reproducible replays ---------
+
+export const modelCalls = pgTable(
+  "model_calls",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** "decide", "draft" or "classify". */
+    kind: text("kind").notNull(),
+    model: text("model").notNull(),
+    promptVersion: text("prompt_version").notNull(),
+    /** sha256 of kind, model, prompt version, instructions, input and schema: the cache key. */
+    inputHash: text("input_hash").notNull(),
+    input: jsonb("input").notNull(),
+    responseText: text("response_text"),
+    valid: boolean("valid"),
+    error: text("error"),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    thinkingTokens: integer("thinking_tokens").notNull().default(0),
+    costUsd: real("cost_usd").notNull().default(0),
+    latencyMs: integer("latency_ms"),
+    /** Groups calls into one run (a simulation or a worker session) for per-run cost reports. */
+    runTag: text("run_tag"),
+    caseId: uuid("case_id"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("model_calls_cache_idx").on(t.kind, t.model, t.inputHash), index("model_calls_run_idx").on(t.runTag)],
+);
