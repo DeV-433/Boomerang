@@ -10,7 +10,7 @@
  */
 import { agentProposer, DECISION_MODEL, GroqClient, RecordingClient, UsageMeter } from "@boomerang/agent";
 import { proposeByRules } from "@boomerang/cases";
-import { loadConfig, requireConfig } from "@boomerang/core";
+import { loadConfig, requireConfig, groqKeys } from "@boomerang/core";
 import { createDb } from "@boomerang/db";
 import {
   baselineStrategy,
@@ -38,42 +38,73 @@ try {
   const proposalSources: Record<string, number> = {};
   let proposer = proposeByRules as Parameters<typeof loopStrategy>[0]["proposer"];
   if (which === "agent") {
-    const client = new RecordingClient(new GroqClient(requireConfig(config, "GROQ_API_KEY"), { rpm: config.GROQ_RPM }), {
-      db: db.db,
-      cache: true,
-      runTag: `sim:${batch.seed}:treatment:agent`,
-      meter,
-    });
+    const client = new RecordingClient(
+      new GroqClient(groqKeys(config), {
+        rpm: config.GROQ_RPM,
+        onKeyLimited: (i) =>
+          console.error(
+            `  groq key ${i.keyIndex + 1} hit its ${i.reason} limit on ${i.model}; set aside until ${new Date(i.untilMs).toISOString()}`,
+          ),
+      }),
+      {
+        db: db.db,
+        cache: true,
+        runTag: `sim:${batch.seed}:treatment:agent`,
+        meter,
+      },
+    );
     const agent = agentProposer({ client, onValidated: (req, ok) => client.markValid(req, ok) });
     const allowFallback = process.argv.includes("--allow-fallback");
     proposer = async (s, diagnosis, now) => {
       const p = await agent(s, diagnosis, now);
-      const source = p.proposedBy === "rules (agent fallback)" ? "rules fallback" : p.proposedBy === "rules" ? "rules (clear-cut)" : String(p.meta?.model ?? p.proposedBy);
+      const source =
+        p.proposedBy === "rules (agent fallback)"
+          ? "rules fallback"
+          : p.proposedBy === "rules"
+            ? "rules (clear-cut)"
+            : String(p.meta?.model ?? p.proposedBy);
       proposalSources[source] = (proposalSources[source] ?? 0) + 1;
       if (!allowFallback && source === "rules fallback") {
-        throw new Error(`agent fell back to the rules (${String(p.meta?.fallback).slice(0, 300)}). Stopped so the result is not a mix; re-run later and cached answers are reused.`);
+        throw new Error(
+          `agent fell back to the rules (${String(p.meta?.fallback).slice(0, 300)}). Stopped so the result is not a mix; re-run later and cached answers are reused.`,
+        );
       }
       if (!allowFallback && p.proposedBy.startsWith("agent:") && p.meta?.model !== DECISION_MODEL) {
-        throw new Error(`decision came from the fallback model ${String(p.meta?.model)}, not ${DECISION_MODEL} (usually its daily token limit). Stopped so the result is not a mix; re-run later and cached answers are reused.`);
+        throw new Error(
+          `decision came from the fallback model ${String(p.meta?.model)}, not ${DECISION_MODEL} (usually its daily token limit). Stopped so the result is not a mix; re-run later and cached answers are reused.`,
+        );
       }
       return p;
     };
   }
-  const strategy = loopStrategy({ name: which === "agent" ? "boomerang-agent" : "boomerang-rules", proposer });
+  const strategy = loopStrategy({
+    name: which === "agent" ? "boomerang-agent" : "boomerang-rules",
+    proposer,
+  });
   const started = Date.now();
   const treatment = await simulateArm(simConfig, rng, treatmentCases, strategy, {
     concurrency: which === "agent" ? Number(arg("concurrency", "6")) : 1,
     onCase: (done, total) => {
       if (which === "agent" && (done % 10 === 0 || done === total)) {
         const t = meter.totals.all;
-        console.error(`  ${done}/${total} cases, ${t.calls} model calls (${t.cachedCalls} cached), $${t.costUsd.toFixed(4)}, ${((Date.now() - started) / 60_000).toFixed(1)} min`);
+        console.error(
+          `  ${done}/${total} cases, ${t.calls} model calls (${t.cachedCalls} cached), $${t.costUsd.toFixed(4)}, ${((Date.now() - started) / 60_000).toFixed(1)} min`,
+        );
       }
     },
   });
-  const control = await simulateArm(simConfig, rng, await loadSimCases(db.db, batch.id, "control"), baselineStrategy(simConfig));
+  const control = await simulateArm(
+    simConfig,
+    rng,
+    await loadSimCases(db.db, batch.id, "control"),
+    baselineStrategy(simConfig),
+  );
   const cmp = compareArms(control, treatment);
   // The same treatment cases under the baseline: separates the strategy's effect from luck of the split.
-  const paired = compareArms(await simulateArm(simConfig, rng, treatmentCases, baselineStrategy(simConfig)), treatment);
+  const paired = compareArms(
+    await simulateArm(simConfig, rng, treatmentCases, baselineStrategy(simConfig)),
+    treatment,
+  );
   const runId = await saveRun(db.db, {
     batchId: batch.id,
     arm: "treatment",
@@ -86,38 +117,68 @@ try {
       escalated: strategy.stats.escalated,
       heldForApproval: strategy.stats.heldForApproval,
       model: which === "agent" ? meter.totals : null,
-      modelCostPerRecoveredDollar: cmp.treatment.recoveredCents > 0 ? meter.totals.all.costUsd / (cmp.treatment.recoveredCents / 100) : null,
+      modelCostPerRecoveredDollar:
+        cmp.treatment.recoveredCents > 0
+          ? meter.totals.all.costUsd / (cmp.treatment.recoveredCents / 100)
+          : null,
     },
   });
 
-  const row = (label: string, c: string, t: string) => console.log(`  ${label.padEnd(26)} ${c.padStart(16)} ${t.padStart(16)}`);
+  const row = (label: string, c: string, t: string) =>
+    console.log(`  ${label.padEnd(26)} ${c.padStart(16)} ${t.padStart(16)}`);
   const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
-  console.log(`treatment run ${runId}, batch ${batch.id} (seed ${batch.seed}), ${simConfig.horizonDays}-day horizon\n`);
+  console.log(
+    `treatment run ${runId}, batch ${batch.id} (seed ${batch.seed}), ${simConfig.horizonDays}-day horizon\n`,
+  );
   row("", "control (baseline)", `treatment (${which})`);
   row("cases", String(cmp.control.cases), String(cmp.treatment.cases));
   row("at risk", dollars(cmp.control.atRiskCents), dollars(cmp.treatment.atRiskCents));
   row("recovered", dollars(cmp.control.recoveredCents), dollars(cmp.treatment.recoveredCents));
   row("recovery rate", pct(cmp.control.recoveryRate), pct(cmp.treatment.recoveryRate));
   row("contacts", String(cmp.control.contacts), String(cmp.treatment.contacts));
-  row("contacts per $ recovered", cmp.control.contactsPerRecoveredDollar?.toFixed(4) ?? "n/a", cmp.treatment.contactsPerRecoveredDollar?.toFixed(4) ?? "n/a");
-  row("median days to recovery", String(cmp.control.medianDaysToRecovery), String(cmp.treatment.medianDaysToRecovery));
-  row("contacts after opt-out", String(cmp.control.contactsAfterOptOut), String(cmp.treatment.contactsAfterOptOut));
+  row(
+    "contacts per $ recovered",
+    cmp.control.contactsPerRecoveredDollar?.toFixed(4) ?? "n/a",
+    cmp.treatment.contactsPerRecoveredDollar?.toFixed(4) ?? "n/a",
+  );
+  row(
+    "median days to recovery",
+    String(cmp.control.medianDaysToRecovery),
+    String(cmp.treatment.medianDaysToRecovery),
+  );
+  row(
+    "contacts after opt-out",
+    String(cmp.control.contactsAfterOptOut),
+    String(cmp.treatment.contactsAfterOptOut),
+  );
   row("disputes", String(cmp.control.disputes), String(cmp.treatment.disputes));
   console.log(`\n  uplift vs control arm:                ${(cmp.uplift * 100).toFixed(1)} points`);
-  console.log(`  uplift vs baseline on the same cases: ${(paired.uplift * 100).toFixed(1)} points (baseline would recover ${pct(paired.control.recoveryRate)} of the treatment arm)`);
+  console.log(
+    `  uplift vs baseline on the same cases: ${(paired.uplift * 100).toFixed(1)} points (baseline would recover ${pct(paired.control.recoveryRate)} of the treatment arm)`,
+  );
   console.log(`  A gap between the two is luck of the split; 7A.6 and 9.2 add intervals and more seeds.`);
-  console.log(`  treatment escalated to a person: ${strategy.stats.escalated}, held for approval: ${strategy.stats.heldForApproval}, stopped: ${strategy.stats.stopped}`);
+  console.log(
+    `  treatment escalated to a person: ${strategy.stats.escalated}, held for approval: ${strategy.stats.heldForApproval}, stopped: ${strategy.stats.stopped}`,
+  );
   console.log(`  gate blocks and holds by rule: ${JSON.stringify(strategy.stats.gateBlocks)}`);
   if (which === "agent") {
     // 5.11: tokens and cost per run and per recovered dollar.
     const t = meter.totals;
-    console.log(`\n  model calls: ${t.all.calls} (${t.all.cachedCalls} answered from cache), tokens in ${t.all.inputTokens}, out ${t.all.outputTokens}, thinking ${t.all.thinkingTokens}`);
-    for (const [kind, k] of Object.entries(t.byKind)) console.log(`    ${kind.padEnd(9)} ${k.calls} calls, $${k.costUsd.toFixed(4)}`);
-    const perDollar = cmp.treatment.recoveredCents > 0 ? t.all.costUsd / (cmp.treatment.recoveredCents / 100) : null;
+    console.log(
+      `\n  model calls: ${t.all.calls} (${t.all.cachedCalls} answered from cache), tokens in ${t.all.inputTokens}, out ${t.all.outputTokens}, thinking ${t.all.thinkingTokens}`,
+    );
+    for (const [kind, k] of Object.entries(t.byKind))
+      console.log(`    ${kind.padEnd(9)} ${k.calls} calls, $${k.costUsd.toFixed(4)}`);
+    const perDollar =
+      cmp.treatment.recoveredCents > 0 ? t.all.costUsd / (cmp.treatment.recoveredCents / 100) : null;
     console.log(`  proposals by source: ${JSON.stringify(proposalSources)}`);
-    console.log(`  model cost: $${t.all.costUsd.toFixed(4)} for the run, $${perDollar?.toFixed(6) ?? "n/a"} per recovered dollar`);
+    console.log(
+      `  model cost: $${t.all.costUsd.toFixed(4)} for the run, $${perDollar?.toFixed(6) ?? "n/a"} per recovered dollar`,
+    );
   }
-  console.log(`\n  Simulated customers: this reflects the simulator's assumptions (sim/README.md), not real-world proof.`);
+  console.log(
+    `\n  Simulated customers: this reflects the simulator's assumptions (sim/README.md), not real-world proof.`,
+  );
 } finally {
   await db.close();
 }

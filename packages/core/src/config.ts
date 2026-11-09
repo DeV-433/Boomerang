@@ -18,6 +18,11 @@ const ConfigSchema = z.object({
   PAYPAL_SANDBOX_MERCHANT_EMAIL: optionalString,
   PAYPAL_SANDBOX_CUSTOMER_EMAIL: optionalString,
   GROQ_API_KEY: optionalString,
+  /**
+   * Extra Groq keys, comma-separated, each from a separate Groq organization (limits are per
+   * organization). Used only by simulations and evals, never by the deployed worker.
+   */
+  GROQ_API_KEYS: optionalString,
   /** Requests per minute per Groq model; unset means no client-side limit (Groq's own headers still pace calls). */
   GROQ_RPM: z.coerce.number().positive().optional(),
   POLICY_MODE: z.enum(["dry_run", "live"]).default("dry_run"),
@@ -44,4 +49,14 @@ export function requireConfig<K extends keyof Config>(config: Config, key: K): N
     throw new Error(`Missing required environment variable ${String(key)}`);
   }
   return value as NonNullable<Config[K]>;
+}
+
+/** GROQ_API_KEY followed by any GROQ_API_KEYS, for batch work (simulations, evals). Throws if there is none. */
+export function groqKeys(config: Config): string[] {
+  const keys = [config.GROQ_API_KEY, ...(config.GROQ_API_KEYS ?? "").split(",")]
+    .map((k) => k?.trim() ?? "")
+    .filter(Boolean);
+  const unique = [...new Set(keys)];
+  if (unique.length === 0) throw new Error("GROQ_API_KEY is not set");
+  return unique;
 }

@@ -117,44 +117,105 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 
 /**
  * Groq's OpenAI-compatible chat completions API, called with fetch. Each call has a hard timeout.
- * Rate limits (429) wait for Groq's retry-after; overload, server errors and timeouts are retried
- * once, then sent to the fallback model. Calls are also paced to stay under the per-minute token
- * budget Groq reports in its headers, and under GROQ_RPM if set.
+ * Overload, server errors and timeouts are retried once, then sent to the fallback model. Calls are
+ * paced to stay under the per-minute token budget Groq reports in its headers, and under GROQ_RPM.
+ *
+ * Several keys (from separate Groq organizations; limits are per organization) can be given. Calls
+ * rotate across them; a key that hits a limit (429) is set aside for that model until Groq says it
+ * resets, and the call moves to the next key at once. Only when every key is limited does the call
+ * wait (per-minute limits, up to 60 s) or give up on that model (daily limits).
  */
 export class GroqClient implements ModelClient {
-  /** Per model, the latest limits Groq reported. Exposed so evals can print the account's real limits. */
+  /** Per model, the latest limits Groq reported (any key). Exposed so evals can print real limits. */
   readonly limits = new Map<string, LimitState>();
+  /** Per key and model ("0|openai/gpt-oss-120b"). */
+  private readonly keyLimits = new Map<string, LimitState>();
+  private readonly blockedUntil = new Map<string, number>();
   private readonly nextSlot = new Map<string, number>();
+  private readonly keys: string[];
+  private turn = 0;
 
   constructor(
-    private readonly apiKey: string,
+    apiKeys: string | readonly string[],
     private readonly options: {
       fallbackModel?: string | null;
       timeoutMs?: number;
       attemptsPerModel?: number;
-      /** Requests per minute allowed per model; calls queue to stay under it (GROQ_RPM). */
+      /** Requests per minute allowed per key and model; calls queue to stay under it (GROQ_RPM). */
       rpm?: number;
       fetchFn?: FetchLike;
       sleep?: (ms: number) => Promise<void>;
+      now?: () => number;
+      /** Told when a key is set aside (index only, never the key). */
+      onKeyLimited?: (info: { keyIndex: number; model: string; untilMs: number; reason: string }) => void;
     } = {},
-  ) {}
-
-  private sleep(ms: number): Promise<void> {
-    return (this.options.sleep ?? ((t: number) => new Promise((r) => setTimeout(r, t))))(ms);
+  ) {
+    this.keys = [
+      ...new Set((typeof apiKeys === "string" ? [apiKeys] : apiKeys).map((k) => k.trim()).filter(Boolean)),
+    ];
+    if (this.keys.length === 0) throw new Error("GroqClient needs at least one API key");
   }
 
-  /** Waits for the next request slot (GROQ_RPM) and for token budget (x-ratelimit-remaining-tokens). */
-  private async pace(model: string, estimatedTokens: number): Promise<void> {
+  get keyCount(): number {
+    return this.keys.length;
+  }
+
+  /** Time an injected (test) sleep has skipped, so the client's clock still moves past a wait. */
+  private skippedMs = 0;
+
+  private now(): number {
+    return (this.options.now ?? Date.now)() + this.skippedMs;
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    if (!this.options.sleep) return new Promise((r) => setTimeout(r, ms));
+    await this.options.sleep(ms);
+    if (!this.options.now) this.skippedMs += ms;
+  }
+
+  /**
+   * Picks the key for the next call to a model: round-robin over keys that are not set aside,
+   * preferring one with token budget left this minute. Returns the wait (ms) if every key is set aside.
+   */
+  private pickKey(model: string, estimatedTokens: number): { key: number } | { waitMs: number } {
+    const now = this.now();
+    const open: number[] = [];
+    for (let i = 0; i < this.keys.length; i++) {
+      const k = (this.turn + i) % this.keys.length;
+      if ((this.blockedUntil.get(`${k}|${model}`) ?? 0) <= now) open.push(k);
+    }
+    if (open.length === 0) {
+      const soonest = Math.min(...this.keys.map((_, k) => this.blockedUntil.get(`${k}|${model}`) ?? now));
+      return { waitMs: Math.max(0, soonest - now) };
+    }
+    const hasBudget = (k: number) => {
+      const st = this.keyLimits.get(`${k}|${model}`);
+      if (!st || st.remainingTokens === null || st.resetTokensMs === null) return true;
+      return st.remainingTokens >= estimatedTokens || st.seenAt + st.resetTokensMs <= now;
+    };
+    const key = open.find(hasBudget) ?? open[0]!;
+    this.turn = (key + 1) % this.keys.length;
+    return { key };
+  }
+
+  /** Waits for the key's next request slot (GROQ_RPM) and for its token budget (x-ratelimit-remaining-tokens). */
+  private async pace(key: number, model: string, estimatedTokens: number): Promise<void> {
+    const id = `${key}|${model}`;
     const rpm = this.options.rpm;
     if (rpm) {
-      const now = Date.now();
-      const slot = Math.max(now, this.nextSlot.get(model) ?? 0);
-      this.nextSlot.set(model, slot + 60_000 / rpm);
+      const now = this.now();
+      const slot = Math.max(now, this.nextSlot.get(id) ?? 0);
+      this.nextSlot.set(id, slot + 60_000 / rpm);
       if (slot > now) await this.sleep(slot - now);
     }
-    const state = this.limits.get(model);
-    if (state && state.remainingTokens !== null && state.resetTokensMs !== null && state.remainingTokens < estimatedTokens) {
-      const wait = state.seenAt + state.resetTokensMs - Date.now();
+    const state = this.keyLimits.get(id);
+    if (
+      state &&
+      state.remainingTokens !== null &&
+      state.resetTokensMs !== null &&
+      state.remainingTokens < estimatedTokens
+    ) {
+      const wait = state.seenAt + state.resetTokensMs - this.now();
       if (wait > 0) await this.sleep(Math.min(wait, 60_000) + 100);
     }
   }
@@ -166,35 +227,55 @@ export class GroqClient implements ModelClient {
     const estimate = Math.ceil((req.system.length + req.input.length) / 3.5) + 600;
     let lastError: ModelCallError | null = null;
     for (const model of models) {
-      let rateLimitWaits = 0;
-      for (let attempt = 1; attempt <= attemptsPerModel; attempt++) {
+      let failures = 0;
+      let allLimitedWaits = 0;
+      // Bounded: each pass either sets a key aside, counts a failure, or counts a wait.
+      for (
+        let pass = 0;
+        pass < this.keys.length + attemptsPerModel + 3 && failures < attemptsPerModel;
+        pass++
+      ) {
+        const pick = this.pickKey(model, estimate);
+        if ("waitMs" in pick) {
+          // Every key is limited for this model: wait only for a short (per-minute) reset.
+          if (pick.waitMs > 60_000 || allLimitedWaits >= 3) break;
+          allLimitedWaits++;
+          await this.sleep(pick.waitMs);
+          continue;
+        }
         try {
-          await this.pace(model, estimate);
-          return await this.once(model, req);
+          await this.pace(pick.key, model, estimate);
+          return await this.once(pick.key, model, req);
         } catch (error) {
           lastError = error instanceof ModelCallError ? error : new ModelCallError(String(error), true);
           if (!lastError.retryable) throw lastError;
-          // A per-minute limit says when to come back: wait (up to 3 times, 60 s each) on the same model.
-          if (lastError.retryAfterMs !== null && rateLimitWaits < 3 && lastError.retryAfterMs <= 60_000) {
-            rateLimitWaits++;
-            attempt--;
-            await this.sleep(lastError.retryAfterMs + 250);
+          if (lastError.retryAfterMs !== null) {
+            // 429: set this key aside for this model until Groq says it resets, and move on.
+            const untilMs = this.now() + lastError.retryAfterMs + 250;
+            this.blockedUntil.set(`${pick.key}|${model}`, untilMs);
+            this.options.onKeyLimited?.({
+              keyIndex: pick.key,
+              model,
+              untilMs,
+              reason: /per day|TPD|RPD/.test(lastError.message) ? "daily" : "per-minute",
+            });
             continue;
           }
-          if (attempt < attemptsPerModel) await this.sleep(800 * attempt + Math.floor(Math.random() * 200));
+          failures++;
+          if (failures < attemptsPerModel) await this.sleep(800 * failures + Math.floor(Math.random() * 200));
         }
       }
     }
     throw lastError ?? new ModelCallError("no model answered", true);
   }
 
-  private async once(model: string, req: ModelRequest): Promise<ModelResponse> {
+  private async once(key: number, model: string, req: ModelRequest): Promise<ModelResponse> {
     const started = Date.now();
     let res: Response;
     try {
       res = await (this.options.fetchFn ?? fetch)(GROQ_URL, {
         method: "POST",
-        headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${this.keys[key]}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           model,
           temperature: 0,
@@ -202,7 +283,10 @@ export class GroqClient implements ModelClient {
             { role: "system", content: req.system },
             { role: "user", content: req.input },
           ],
-          response_format: { type: "json_schema", json_schema: { name: req.kind, strict: true, schema: req.jsonSchema } },
+          response_format: {
+            type: "json_schema",
+            json_schema: { name: req.kind, strict: true, schema: req.jsonSchema },
+          },
           reasoning_effort: req.reasoning,
           include_reasoning: false,
           max_completion_tokens: 2048,
@@ -213,30 +297,48 @@ export class GroqClient implements ModelClient {
     } catch (error) {
       const e = error as Error;
       const timedOut = e.name === "TimeoutError" || e.name === "AbortError";
-      throw new ModelCallError(`${model} ${req.kind} ${timedOut ? "timed out" : `network error: ${e.message}`}`, true);
+      throw new ModelCallError(
+        `${model} ${req.kind} ${timedOut ? "timed out" : `network error: ${e.message}`}`,
+        true,
+      );
     }
 
-    this.limits.set(model, {
+    const state: LimitState = {
       limitTokensPerMinute: numberHeader(res, "x-ratelimit-limit-tokens"),
       remainingTokens: numberHeader(res, "x-ratelimit-remaining-tokens"),
       resetTokensMs: parseDuration(res.headers.get("x-ratelimit-reset-tokens")),
       limitRequestsPerDay: numberHeader(res, "x-ratelimit-limit-requests"),
       remainingRequestsToday: numberHeader(res, "x-ratelimit-remaining-requests"),
-      seenAt: Date.now(),
-    });
+      seenAt: this.now(),
+    };
+    this.limits.set(model, state);
+    this.keyLimits.set(`${key}|${model}`, state);
 
     if (!res.ok) {
       const body = (await res.text()).slice(0, 400);
       const retryAfterMs =
-        res.status === 429 ? (parseDuration(res.headers.get("retry-after")) ?? parseDuration(res.headers.get("x-ratelimit-reset-tokens")) ?? 15_000) : null;
+        res.status === 429
+          ? (parseDuration(res.headers.get("retry-after")) ??
+            parseDuration(res.headers.get("x-ratelimit-reset-tokens")) ??
+            15_000)
+          : null;
       // json_validate_failed: Groq's own strict-mode check rejected this sample. Generation is random, so another try can pass.
       const retryable = res.status === 429 || res.status >= 500 || body.includes('"json_validate_failed"');
-      throw new ModelCallError(`${model} ${req.kind} failed (${res.status}): ${body}`, retryable, retryAfterMs);
+      const who = this.keys.length > 1 ? ` [key ${key + 1}/${this.keys.length}]` : "";
+      throw new ModelCallError(
+        `${model} ${req.kind} failed (${res.status})${who}: ${body}`,
+        retryable,
+        retryAfterMs,
+      );
     }
 
     const json = (await res.json()) as {
       choices?: { message?: { content?: string | null } }[];
-      usage?: { prompt_tokens?: number; completion_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } };
+      usage?: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        completion_tokens_details?: { reasoning_tokens?: number };
+      };
     };
     const reasoning = json.usage?.completion_tokens_details?.reasoning_tokens ?? 0;
     return {
@@ -261,7 +363,17 @@ function numberHeader(res: Response, name: string): number | null {
 
 export function requestHash(req: ModelRequest): string {
   return createHash("sha256")
-    .update(JSON.stringify([req.kind, req.model, req.promptVersion, req.system, req.input, req.jsonSchema, req.reasoning]))
+    .update(
+      JSON.stringify([
+        req.kind,
+        req.model,
+        req.promptVersion,
+        req.system,
+        req.input,
+        req.jsonSchema,
+        req.reasoning,
+      ]),
+    )
     .digest("hex");
 }
 
@@ -289,7 +401,10 @@ export class UsageMeter {
       costUsd: rs.reduce((s, r) => s + r.costUsd, 0),
     });
     const kinds = [...new Set(this.calls.map((c) => c.kind))];
-    return { all: sum(this.calls), byKind: Object.fromEntries(kinds.map((k) => [k, sum(this.calls.filter((c) => c.kind === k))])) };
+    return {
+      all: sum(this.calls),
+      byKind: Object.fromEntries(kinds.map((k) => [k, sum(this.calls.filter((c) => c.kind === k))])),
+    };
   }
 }
 
@@ -316,7 +431,14 @@ export class RecordingClient implements ModelClient {
         .select()
         .from(modelCalls)
         // Only answers from the requested model: a fallback model's answer is not reused as the primary's.
-        .where(and(eq(modelCalls.kind, req.kind), eq(modelCalls.inputHash, hash), eq(modelCalls.model, req.model), sql`${modelCalls.error} is null`))
+        .where(
+          and(
+            eq(modelCalls.kind, req.kind),
+            eq(modelCalls.inputHash, hash),
+            eq(modelCalls.model, req.model),
+            sql`${modelCalls.error} is null`,
+          ),
+        )
         .orderBy(desc(modelCalls.createdAt))
         .limit(1);
       if (hit?.responseText) {
@@ -366,6 +488,12 @@ export class RecordingClient implements ModelClient {
     await this.options.db
       .update(modelCalls)
       .set({ valid })
-      .where(and(eq(modelCalls.kind, req.kind), eq(modelCalls.inputHash, requestHash(req)), sql`${modelCalls.valid} is null`));
+      .where(
+        and(
+          eq(modelCalls.kind, req.kind),
+          eq(modelCalls.inputHash, requestHash(req)),
+          sql`${modelCalls.valid} is null`,
+        ),
+      );
   }
 }
