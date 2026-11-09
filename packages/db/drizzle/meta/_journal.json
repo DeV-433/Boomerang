@@ -43,6 +43,13 @@
       "when": 1794227186179,
       "tag": "0005_model_calls",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794255194609,
+      "tag": "0006_scenarios",
+      "breakpoints": true
     }
   ]
 }

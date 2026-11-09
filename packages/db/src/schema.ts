@@ -375,3 +375,26 @@ export const modelCalls = pgTable(
   },
   (t) => [index("model_calls_cache_idx").on(t.kind, t.model, t.inputHash), index("model_calls_run_idx").on(t.runTag)],
 );
+
+// 7A.9: saved what-if scenarios -----------------------------------------------------------------------
+
+export const scenarios = pgTable(
+  "scenarios",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    batchId: uuid("batch_id")
+      .notNull()
+      .references(() => batches.id),
+    /** The policy overrides, exactly as validated. */
+    overrides: jsonb("overrides").notNull(),
+    /** The what-if result when saved (metrics, diff, intervals). */
+    result: jsonb("result").notNull(),
+    /** Replay fingerprints when saved: a reload with equal fingerprints reproduced the result exactly. */
+    baseFingerprint: text("base_fingerprint").notNull(),
+    scenarioFingerprint: text("scenario_fingerprint").notNull(),
+    createdBy: text("created_by").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("scenarios_batch_name").on(t.batchId, t.name)],
+);

@@ -315,3 +315,21 @@ export interface WhatIfDefaults {
   hoursEnd: number;
   contactDays: number[];
 }
+
+// 7A.9: saved scenarios ---------------------------------------------------------------------------------
+
+export interface SavedScenario {
+  id: string;
+  name: string;
+  batchId: string;
+  overrides: WhatIfOverrides;
+  result: WhatIfResponse;
+  createdAt: string;
+}
+
+export interface ScenarioReloadResponse {
+  scenario: SavedScenario;
+  result: WhatIfResponse;
+  /** True when the fresh replay reproduced the saved fingerprints and diff exactly. */
+  sameResult: boolean;
+}

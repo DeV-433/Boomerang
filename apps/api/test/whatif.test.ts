@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import type { WhatIfDefaults, WhatIfResponse } from "@boomerang/core";
+import type { SavedScenario, ScenarioReloadResponse, WhatIfDefaults, WhatIfResponse } from "@boomerang/core";
 import type { DbHandle } from "@boomerang/db";
 import { hasTestDb, setupTestDb } from "@boomerang/db/testing";
 import { loadSimConfig, seedBatch, type EventPoster } from "@boomerang/sim";
@@ -79,5 +79,51 @@ describe.skipIf(!hasTestDb)("dashboard API: what-if (7A.7)", () => {
     expect((await post({ batch: batchId, overrides: { mode: "live" } })).statusCode).toBe(400);
     expect((await post({ batch: randomUUID() })).statusCode).toBe(404);
     expect((await app.inject({ method: "POST", url: "/api/whatif", payload: {} })).statusCode).toBe(401);
+  });
+
+  it("saves a named scenario that reloads with the same result (7A.9)", async () => {
+    const name = `stricter cap ${randomUUID().slice(0, 6)}`;
+    const saved = await app.inject({
+      method: "POST",
+      url: "/api/scenarios",
+      headers: auth,
+      payload: { name, batch: batchId, overrides: { perCase: 2, minGapHours: 72 } },
+    });
+    expect(saved.statusCode, saved.body).toBe(201);
+    const s = saved.json<SavedScenario>();
+    expect(s).toMatchObject({ name, batchId, overrides: { perCase: 2, minGapHours: 72 } });
+
+    const list = (
+      await app.inject({ method: "GET", url: `/api/scenarios?batch=${batchId}`, headers: auth })
+    ).json<{ rows: SavedScenario[] }>();
+    expect(list.rows.map((r) => r.id)).toContain(s.id);
+
+    const reload = (
+      await app.inject({ method: "GET", url: `/api/scenarios/${s.id}/reload`, headers: auth })
+    ).json<ScenarioReloadResponse>();
+    expect(reload.sameResult).toBe(true);
+    expect(reload.result.diff).toEqual(s.result.diff);
+
+    const dup = await app.inject({
+      method: "POST",
+      url: "/api/scenarios",
+      headers: auth,
+      payload: { name, batch: batchId, overrides: {} },
+    });
+    expect(dup.statusCode).toBe(409);
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/scenarios",
+          headers: auth,
+          payload: { batch: batchId },
+        })
+      ).statusCode,
+    ).toBe(400);
+    expect(
+      (await app.inject({ method: "GET", url: `/api/scenarios/${randomUUID()}/reload`, headers: auth }))
+        .statusCode,
+    ).toBe(404);
   });
 });

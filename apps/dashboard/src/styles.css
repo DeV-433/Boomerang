@@ -550,3 +550,91 @@ button.danger {
   border-radius: 50%;
   background: var(--ok);
 }
+.whatif-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .whatif-layout {
+    grid-template-columns: 1fr;
+  }
+}
+.controls {
+  display: grid;
+  gap: 14px;
+}
+.controls .card-head {
+  margin-bottom: 0;
+}
+.slider {
+  display: grid;
+  gap: 2px;
+}
+.slider-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+.slider-head output {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.slider.changed .slider-head output {
+  color: var(--accent);
+}
+.slider input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.slider-foot {
+  font-size: 11px;
+}
+.days {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.days legend {
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.save-row {
+  display: flex;
+  gap: 8px;
+}
+.save-row input {
+  flex: 1;
+  min-width: 0;
+}
+.save h3,
+.saved h3 {
+  margin: 0 0 6px;
+}
+.saved ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+.saved .link-button {
+  font-size: 13px;
+  color: var(--accent);
+  padding: 0;
+}
+.whatif-table {
+  max-width: none;
+  margin-top: 16px;
+}
+.stale {
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+.flash-bad {
+  border-color: var(--bad);
+}
