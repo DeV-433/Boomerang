@@ -22,7 +22,8 @@ const simulation =
 logger.info({ simulatedEvents: Boolean(simulation) }, "simulated event route");
 const corsOrigins = corsOriginsFrom(config);
 logger.info({ corsOrigins }, "dashboard origins");
-const app = await buildApp({ db, verifier, logger, simulation, corsOrigins });
+if (!config.OPERATOR_TOKEN) logger.warn("OPERATOR_TOKEN is not set: the dashboard API (/api) stays closed until it is");
+const app = await buildApp({ db, verifier, logger, simulation, corsOrigins, operatorToken: config.OPERATOR_TOKEN, policyMode: config.POLICY_MODE });
 
 const shutdown = async (signal: string) => {
   logger.info({ signal }, "shutting down");
