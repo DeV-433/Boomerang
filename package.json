@@ -12,7 +12,7 @@
   ],
   "scripts": {
     "lint": "eslint .",
-    "typecheck": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p apps/dashboard/tsconfig.json",
     "test": "npm run test --workspaces --if-present",
     "ci": "npm run lint && npm run typecheck && npm run db:migrate && npm test",
     "db:up": "docker compose up -d db",
@@ -21,6 +21,7 @@
     "db:migrate": "npm run migrate -w @boomerang/db",
     "dev:api": "npm run dev -w @boomerang/api",
     "dev:worker": "npm run dev -w @boomerang/worker",
+    "dev:dashboard": "npm run dev -w @boomerang/dashboard",
     "prepare": "git config core.hooksPath .githooks || true",
     "sim:seed": "npm run seed -w @boomerang/sim --",
     "sim:baseline": "npm run baseline -w @boomerang/sim --",

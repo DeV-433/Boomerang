@@ -20,6 +20,7 @@ Decisions that differ from the text of this plan:
 | Model | Groq (`GROQ_API_KEY`), called with plain `fetch` from `packages/agent` only. Decisions and reply classification: `openai/gpt-oss-120b`; drafting and fallback: `openai/gpt-oss-20b` (the only production Groq models with strict JSON-schema output). Read "Claude" in later steps as "the model". Gemini was used first and dropped on 2026-11-09: `gemini-3.8-flash` was overloaded and the key's per-minute quota stalled a simulation at ~3 calls/min. |
 | Model limits | The key is on Groq's free tier; its headers report, per model, 1K req/day and 8K tokens/min and 200K tokens/day, which is enforced as a rolling window (a full `demo-1` agent run needs ~600 decisions, ~600K tokens on 120B). The Render worker shares the key, so after a simulation drains 120B the worker's decisions come from 20B, then the rules. A full agent simulation of `demo-1` needs ~430 decisions (~500K tokens), so it may span more than a day's allowance; re-runs are free from the `model_calls` cache. |
 | Extra Groq keys | Teammates' keys from their own Groq organizations go in local `.env` as `GROQ_API_KEYS` (comma-separated). Simulations and evals rotate across `GROQ_API_KEY` plus these; a key that hits a limit is set aside until it resets. The deployed worker uses `GROQ_API_KEY` only; never put `GROQ_API_KEYS` on Render. |
+| Dashboard access | Not in the original plan: `/api/*` requires `OPERATOR_TOKEN` (Bearer), typed once into the dashboard and kept in `sessionStorage`. `/healthz` and the webhooks stay public. CORS allows only `DASHBOARD_ORIGINS` (plus local Vite dev outside production). |
 | Scope | No cut line: every phase is in scope. |
 | CI (1.2) | GitHub Actions cannot run on this account. `.githooks/pre-push` runs lint, type-check, migrations and all tests and blocks the push on failure. `npm install` enables it. Start Postgres first (`npm run db:up`). |
 | Deploys | Render deploys every push to `main` (`autoDeployTrigger: commit`), so the pre-push hook is the only gate. |
@@ -185,7 +186,7 @@ No cut line: every phase is in scope (decided 2026-11-09, step 0.7).
 
 ## Phase 6: Operator dashboard (to CP5)
 
-- [ ] **6.1 [M]** Dashboard app skeleton (React, Vite, routing, API client). *Done when:* it loads and calls `/healthz`.
+- [ ] **6.1 [M]** Dashboard app skeleton (React, Vite, routing, API client). *Done when:* it loads and calls `/healthz`. _(Built: `apps/dashboard` (React 19, Vite 8, React Router, TanStack Query), CORS on the API from `DASHBOARD_ORIGINS`. Verified locally in headless Chromium: loads, deep links work, badge shows "API healthy". Pending: the deployed static site, once `DASHBOARD_ORIGINS` is set on Render.)_
 - [ ] **6.2 [M]** API: `GET /api/summary`. *Done when:* returns at-risk, recovered, rate and control comparison.
 - [ ] **6.3 [M]** Summary screen. *Done when:* numbers match the metrics module for a seeded run.
 - [ ] **6.4 [M]** API: `GET /api/cases` with paging, filters and sorting. *Done when:* server-side paging works on 300 cases.

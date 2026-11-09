@@ -12,9 +12,10 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "fastify": "5.12.8",
     "@boomerang/core": "*",
     "@boomerang/db": "*",
-    "@boomerang/paypal": "*"
+    "@boomerang/paypal": "*",
+    "@fastify/cors": "11.3.1",
+    "fastify": "5.12.8"
   }
 }

@@ -33,4 +33,22 @@ export default tseslint.config(
   restrictImports(["packages/paypal/**"], [], [MODEL]),
   restrictImports(["packages/agent/**"], [], [PAYPAL]),
   restrictImports(["packages/policy/**", "packages/audit/**"], [], [PAYPAL, MODEL, BOUNDARY]),
+  // The dashboard runs in the browser: it talks to the API over HTTP and may import only types from core.
+  {
+    files: ["apps/dashboard/**/*.{ts,tsx}"],
+    languageOptions: { globals: { ...globals.browser } },
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            PAYPAL,
+            MODEL,
+            { group: ["@boomerang/*", "!@boomerang/core"], message: "The dashboard reaches server code only through the API." },
+            { group: ["@boomerang/core"], allowTypeImports: true, message: "Import only types from @boomerang/core in the dashboard." },
+          ],
+        },
+      ],
+    },
+  },
 );

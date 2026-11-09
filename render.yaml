@@ -52,6 +52,12 @@ services:
       # Optional client-side cap per model; Groq's rate-limit headers pace calls either way.
       - key: GROQ_RPM
         value: "25"
+      # The dashboard's address (6.1), comma-separated if more than one. Set in the Render dashboard.
+      - key: DASHBOARD_ORIGINS
+        sync: false
+      # Shared secret the operator types into the dashboard; every /api route requires it.
+      - key: OPERATOR_TOKEN
+        sync: false
       - key: PAY_LINK_SECRET
         sync: false
       - key: SIM_WEBHOOK_SECRET
@@ -91,7 +97,7 @@ services:
       - key: GROQ_RPM
         value: "25"
 
-  # Operator dashboard (placeholder until step 6.1).
+  # Operator dashboard (React + Vite, step 6.1). Talks to the API over HTTPS with the operator token.
   - type: web
     name: boomerang-dashboard
     runtime: static
@@ -99,3 +105,12 @@ services:
     staticPublishPath: ./apps/dashboard/dist
     # Switch to checksPass once GitHub Actions runs on this account.
     autoDeployTrigger: commit
+    # Client-side routes (/cases, /approvals, ...) all serve the app shell.
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      # Public: baked into the bundle at build time.
+      - key: VITE_API_URL
+        value: https://boomerang-api-rgd8.onrender.com

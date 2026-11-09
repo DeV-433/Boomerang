@@ -1,7 +1,7 @@
 import { createLogger, loadConfig, requireConfig } from "@boomerang/core";
 import { createDb } from "@boomerang/db";
 import { assertToolkitReady, createPayPal } from "@boomerang/paypal";
-import { buildApp } from "./app";
+import { buildApp, corsOriginsFrom } from "./app";
 
 const config = loadConfig();
 const logger = createLogger({ name: "api", level: config.LOG_LEVEL });
@@ -20,7 +20,9 @@ if (!config.PAYPAL_WEBHOOK_ID) {
 const simulation =
   config.PAYPAL_ENVIRONMENT === "SANDBOX" && config.SIM_WEBHOOK_SECRET ? { secret: config.SIM_WEBHOOK_SECRET } : undefined;
 logger.info({ simulatedEvents: Boolean(simulation) }, "simulated event route");
-const app = await buildApp({ db, verifier, logger, simulation });
+const corsOrigins = corsOriginsFrom(config);
+logger.info({ corsOrigins }, "dashboard origins");
+const app = await buildApp({ db, verifier, logger, simulation, corsOrigins });
 
 const shutdown = async (signal: string) => {
   logger.info({ signal }, "shutting down");

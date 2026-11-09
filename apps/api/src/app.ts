@@ -1,3 +1,4 @@
+import cors from "@fastify/cors";
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from "fastify";
 import type { Logger } from "@boomerang/core";
 import type { DbHandle } from "@boomerang/db";
@@ -11,6 +12,17 @@ export interface AppDeps {
   logger?: Logger;
   /** Enables POST /webhooks/simulated. Set only in the sandbox with SIM_WEBHOOK_SECRET configured. */
   simulation?: { secret: string };
+  /** Browser origins allowed to call the API (6.1). Empty means no cross-origin access. */
+  corsOrigins?: string[];
+}
+
+/** DASHBOARD_ORIGINS plus local Vite dev outside production. */
+export function corsOriginsFrom(config: { DASHBOARD_ORIGINS?: string; NODE_ENV: string }): string[] {
+  const listed = (config.DASHBOARD_ORIGINS ?? "")
+    .split(",")
+    .map((o) => o.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+  return config.NODE_ENV === "production" ? listed : [...listed, "http://localhost:5173", "http://127.0.0.1:5173"];
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
@@ -19,6 +31,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     trustProxy: true, // Render terminates TLS in front of the service.
   });
 
+  await app.register(cors, {
+    origin: deps.corsOrigins ?? [],
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Authorization", "Content-Type"],
+    maxAge: 600,
+  });
   await app.register(healthRoutes, deps);
   // Encapsulated so its raw-body JSON parser does not affect the dashboard API.
   await app.register(webhookRoutes, deps);

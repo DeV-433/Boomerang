@@ -28,6 +28,10 @@ const ConfigSchema = z.object({
   POLICY_MODE: z.enum(["dry_run", "live"]).default("dry_run"),
   PAY_LINK_SECRET: optionalString,
   SIM_WEBHOOK_SECRET: optionalString,
+  /** Browser origins allowed to call the API (the dashboard), comma-separated. Local Vite dev is always allowed outside production. */
+  DASHBOARD_ORIGINS: optionalString,
+  /** Shared secret the operator types into the dashboard; every /api route requires it. Unset means /api is closed. */
+  OPERATOR_TOKEN: optionalString,
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
