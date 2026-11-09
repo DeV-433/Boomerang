@@ -93,7 +93,7 @@ function Results({ r, stale }: { r: WhatIfResponse; stale: boolean }) {
       pct(diff.recoveryRate.base),
       pct(diff.recoveryRate.scenario),
       points(diff.recoveryRate.deltaPoints),
-      ci(interval.recoveryRatePoints, (n) => n.toFixed(1)),
+      ci(interval.recoveryRatePoints, (n) => points(n)),
     ],
     ["Contacts sent", count(diff.contacts.base), count(diff.contacts.scenario), signed(diff.contacts.delta)],
     [
