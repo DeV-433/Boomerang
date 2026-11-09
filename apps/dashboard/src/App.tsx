@@ -8,6 +8,7 @@ import { Approvals } from "./pages/Approvals";
 import { Audit } from "./pages/Audit";
 import { Cases } from "./pages/Cases";
 import { Summary } from "./pages/Summary";
+import { Trust } from "./pages/Trust";
 import { WhatIf } from "./pages/WhatIf";
 import { PauseButton, PausedBanner } from "./SystemControl";
 
@@ -17,6 +18,7 @@ const NAV = [
   { to: "/approvals", label: "Approvals" },
   { to: "/audit", label: "Audit" },
   { to: "/whatif", label: "What-if" },
+  { to: "/trust", label: "Trust" },
 ];
 
 function HealthBadge() {
@@ -71,6 +73,7 @@ export function App() {
             <Route path="/approvals" element={<Approvals />} />
             <Route path="/audit" element={<Audit />} />
             <Route path="/whatif" element={<WhatIf />} />
+            <Route path="/trust" element={<Trust />} />
             <Route path="*" element={<Placeholder title="Not found" />} />
           </Routes>
         )}
