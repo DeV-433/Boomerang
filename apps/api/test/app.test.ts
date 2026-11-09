@@ -61,9 +61,16 @@ describe.skipIf(!hasTestDb)("api", () => {
     expect(res.json()).toEqual({ received: true, duplicate: false });
 
     const [row] = await h.db.select().from(events).where(eq(events.paypalEventId, id));
-    expect(row).toMatchObject({ type: "INVOICING.INVOICE.PAID", resourceType: "invoices", resourceId: "INV2-AAAA" });
+    expect(row).toMatchObject({
+      type: "INVOICING.INVOICE.PAID",
+      resourceType: "invoices",
+      resourceId: "INV2-AAAA",
+    });
     expect(row!.rawBody).toBe(body);
-    expect(row!.headers).toMatchObject({ "paypal-transmission-id": "tx", "content-type": "application/json" });
+    expect(row!.headers).toMatchObject({
+      "paypal-transmission-id": "tx",
+      "content-type": "application/json",
+    });
     expect(row!.processedAt).toBeNull();
   });
 
@@ -84,7 +91,12 @@ describe.skipIf(!hasTestDb)("api", () => {
       payload: sampleEvent(),
     });
     expect(unsigned.statusCode).toBe(400);
-    const malformed = await app.inject({ method: "POST", url: "/webhooks/paypal", headers: signed, payload: "{nope" });
+    const malformed = await app.inject({
+      method: "POST",
+      url: "/webhooks/paypal",
+      headers: signed,
+      payload: "{nope",
+    });
     expect(malformed.statusCode).toBe(400);
   });
 
@@ -97,7 +109,12 @@ describe.skipIf(!hasTestDb)("api", () => {
         },
       },
     });
-    const res = await failing.inject({ method: "POST", url: "/webhooks/paypal", headers: signed, payload: sampleEvent() });
+    const res = await failing.inject({
+      method: "POST",
+      url: "/webhooks/paypal",
+      headers: signed,
+      payload: sampleEvent(),
+    });
     expect(res.statusCode).toBe(503);
     await failing.close();
   });
@@ -114,7 +131,8 @@ describe.skipIf(!hasTestDb)("api", () => {
   // 1.10
   it("stores an event delivered twice exactly once", async () => {
     const id = `WH-${randomUUID()}`;
-    const send = () => app.inject({ method: "POST", url: "/webhooks/paypal", headers: signed, payload: sampleEvent(id) });
+    const send = () =>
+      app.inject({ method: "POST", url: "/webhooks/paypal", headers: signed, payload: sampleEvent(id) });
     const [first, second] = await Promise.all([send(), send()]);
     expect([first.statusCode, second.statusCode]).toEqual([200, 200]);
     expect([first.json().duplicate, second.json().duplicate].sort()).toEqual([false, true]);

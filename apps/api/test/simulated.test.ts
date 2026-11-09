@@ -17,7 +17,10 @@ function failureEvent(id = `WH-SIM-${randomUUID()}`) {
     event_type: "BILLING.SUBSCRIPTION.PAYMENT.FAILED",
     resource_type: "subscription",
     boomerang_simulated: true,
-    resource: { id: "I-SIMTEST", billing_info: { outstanding_balance: { currency_code: "USD", value: "29.00" } } },
+    resource: {
+      id: "I-SIMTEST",
+      billing_info: { outstanding_balance: { currency_code: "USD", value: "29.00" } },
+    },
   });
 }
 
@@ -38,7 +41,10 @@ describe.skipIf(!hasTestDb)("simulated webhook route (3.4)", () => {
     app.inject({
       method: "POST",
       url: "/webhooks/simulated",
-      headers: { "content-type": "application/json", ...(signature ? { [SIM_SIGNATURE_HEADER]: signature } : {}) },
+      headers: {
+        "content-type": "application/json",
+        ...(signature ? { [SIM_SIGNATURE_HEADER]: signature } : {}),
+      },
       payload: body,
     });
 
@@ -49,13 +55,20 @@ describe.skipIf(!hasTestDb)("simulated webhook route (3.4)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ received: true, duplicate: false, simulated: true });
     const [row] = await h.db.select().from(events).where(eq(events.paypalEventId, id));
-    expect(row).toMatchObject({ simulated: true, source: "simulated", resourceId: "I-SIMTEST", rawBody: body });
+    expect(row).toMatchObject({
+      simulated: true,
+      source: "simulated",
+      resourceId: "I-SIMTEST",
+      rawBody: body,
+    });
   });
 
   it("rejects a wrong secret, a tampered body, a stale timestamp and a missing signature", async () => {
     const body = failureEvent();
     expect((await post(body, signSimulatedEvent("wrong-secret", body))).statusCode).toBe(400);
-    expect((await post(body.replace("29.00", "2900.00"), signSimulatedEvent(SECRET, body))).statusCode).toBe(400);
+    expect((await post(body.replace("29.00", "2900.00"), signSimulatedEvent(SECRET, body))).statusCode).toBe(
+      400,
+    );
     const stale = Math.floor(Date.now() / 1000) - 3600;
     expect((await post(body, signSimulatedEvent(SECRET, body, stale))).statusCode).toBe(400);
     expect((await post(body)).statusCode).toBe(400);
@@ -71,7 +84,10 @@ describe.skipIf(!hasTestDb)("simulated webhook route (3.4)", () => {
     const res = await app.inject({
       method: "POST",
       url: "/webhooks/paypal",
-      headers: { "content-type": "application/json", [SIM_SIGNATURE_HEADER]: signSimulatedEvent(SECRET, body) },
+      headers: {
+        "content-type": "application/json",
+        [SIM_SIGNATURE_HEADER]: signSimulatedEvent(SECRET, body),
+      },
       payload: body,
     });
     expect(res.statusCode).toBe(400);
@@ -83,7 +99,10 @@ describe.skipIf(!hasTestDb)("simulated webhook route (3.4)", () => {
     const res = await plain.inject({
       method: "POST",
       url: "/webhooks/simulated",
-      headers: { "content-type": "application/json", [SIM_SIGNATURE_HEADER]: signSimulatedEvent(SECRET, body) },
+      headers: {
+        "content-type": "application/json",
+        [SIM_SIGNATURE_HEADER]: signSimulatedEvent(SECRET, body),
+      },
       payload: body,
     });
     expect(res.statusCode).toBe(404);

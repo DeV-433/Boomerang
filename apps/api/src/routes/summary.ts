@@ -6,7 +6,9 @@ import type { AppDeps } from "../app";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function totals(rows: { cases: number; atRisk: number; recovered: number; recoveredCases: number } | undefined): ArmTotals {
+function totals(
+  rows: { cases: number; atRisk: number; recovered: number; recoveredCases: number } | undefined,
+): ArmTotals {
   const atRiskCents = Number(rows?.atRisk ?? 0);
   const recoveredCents = Number(rows?.recovered ?? 0);
   return {
@@ -39,7 +41,10 @@ const runInfo = (r: typeof simRuns.$inferSelect): SimRunInfo => ({
 });
 
 /** Step 6.2: at-risk, recovered, rate and the control comparison, live and simulated. */
-export async function buildSummary(db: Database, opts: { batch?: string; treatmentRun?: string; mode: "dry_run" | "live" }): Promise<SummaryResponse> {
+export async function buildSummary(
+  db: Database,
+  opts: { batch?: string; treatmentRun?: string; mode: "dry_run" | "live" },
+): Promise<SummaryResponse> {
   const [batch] =
     opts.batch && opts.batch !== "latest"
       ? await db.select().from(batches).where(eq(batches.id, opts.batch))
@@ -58,19 +63,35 @@ export async function buildSummary(db: Database, opts: { batch?: string; treatme
   };
   const [organicRow] = await db.select(totalsSelect).from(cases).where(isNull(cases.batchId));
 
-  const runs = batch ? await db.select().from(simRuns).where(and(eq(simRuns.batchId, batch.id), sql`${simRuns.metrics} is not null`)).orderBy(desc(simRuns.startedAt)) : [];
+  const runs = batch
+    ? await db
+        .select()
+        .from(simRuns)
+        .where(and(eq(simRuns.batchId, batch.id), sql`${simRuns.metrics} is not null`))
+        .orderBy(desc(simRuns.startedAt))
+    : [];
   const control = runs.find((r) => r.arm === "control");
   const treatment = opts.treatmentRun
     ? runs.find((r) => r.id === opts.treatmentRun && r.arm === "treatment")
-    : (runs.find((r) => r.arm === "treatment" && r.strategy === "boomerang-agent") ?? runs.find((r) => r.arm === "treatment"));
-  const withMetrics = (r: typeof control) => (r ? { ...runInfo(r), metrics: r.metrics as SimArmMetrics } : null);
+    : (runs.find((r) => r.arm === "treatment" && r.strategy === "boomerang-agent") ??
+      runs.find((r) => r.arm === "treatment"));
+  const withMetrics = (r: typeof control) =>
+    r ? { ...runInfo(r), metrics: r.metrics as SimArmMetrics } : null;
   const simControl = withMetrics(control);
   const simTreatment = withMetrics(treatment);
 
   const [sys] = await db.select().from(systemState).where(eq(systemState.id, 1));
   return {
     batch: batch
-      ? { id: batch.id, name: batch.name, seed: batch.seed, size: batch.size, mode: batch.mode, createdAt: batch.createdAt.toISOString(), startedAt: batch.startedAt?.toISOString() ?? null }
+      ? {
+          id: batch.id,
+          name: batch.name,
+          seed: batch.seed,
+          size: batch.size,
+          mode: batch.mode,
+          createdAt: batch.createdAt.toISOString(),
+          startedAt: batch.startedAt?.toISOString() ?? null,
+        }
       : null,
     live: { ...live, upliftPoints: points(live.control, live.treatment) },
     organic: totals(organicRow),
@@ -87,10 +108,17 @@ export async function buildSummary(db: Database, opts: { batch?: string; treatme
 export async function summaryRoutes(app: FastifyInstance, deps: AppDeps): Promise<void> {
   app.get<{ Querystring: { batch?: string; treatmentRun?: string } }>("/summary", async (req, reply) => {
     const { batch, treatmentRun } = req.query;
-    if (batch && batch !== "latest" && !UUID.test(batch)) return reply.code(400).send({ error: "batch must be a batch id or 'latest'" });
-    if (treatmentRun && !UUID.test(treatmentRun)) return reply.code(400).send({ error: "treatmentRun must be a run id" });
-    const summary = await buildSummary(deps.db.db, { batch, treatmentRun, mode: deps.policyMode ?? "dry_run" });
-    if (batch && batch !== "latest" && !summary.batch) return reply.code(404).send({ error: "batch not found" });
+    if (batch && batch !== "latest" && !UUID.test(batch))
+      return reply.code(400).send({ error: "batch must be a batch id or 'latest'" });
+    if (treatmentRun && !UUID.test(treatmentRun))
+      return reply.code(400).send({ error: "treatmentRun must be a run id" });
+    const summary = await buildSummary(deps.db.db, {
+      batch,
+      treatmentRun,
+      mode: deps.policyMode ?? "dry_run",
+    });
+    if (batch && batch !== "latest" && !summary.batch)
+      return reply.code(404).send({ error: "batch not found" });
     return summary;
   });
 }

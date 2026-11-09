@@ -9,7 +9,12 @@ const logger = createLogger({ name: "api", level: config.LOG_LEVEL });
 const db = createDb(requireConfig(config, "DATABASE_URL"));
 const toolkit = assertToolkitReady();
 logger.info(
-  { toolkitVersion: toolkit.version, pinned: toolkit.pinned, installedTools: toolkit.installedTools, enabled: toolkit.enabled },
+  {
+    toolkitVersion: toolkit.version,
+    pinned: toolkit.pinned,
+    installedTools: toolkit.installedTools,
+    enabled: toolkit.enabled,
+  },
   "PayPal Agent Toolkit loaded",
 );
 const { verifier } = createPayPal(config, { db: db.db, logger });
@@ -18,12 +23,23 @@ if (!config.PAYPAL_WEBHOOK_ID) {
 }
 
 const simulation =
-  config.PAYPAL_ENVIRONMENT === "SANDBOX" && config.SIM_WEBHOOK_SECRET ? { secret: config.SIM_WEBHOOK_SECRET } : undefined;
+  config.PAYPAL_ENVIRONMENT === "SANDBOX" && config.SIM_WEBHOOK_SECRET
+    ? { secret: config.SIM_WEBHOOK_SECRET }
+    : undefined;
 logger.info({ simulatedEvents: Boolean(simulation) }, "simulated event route");
 const corsOrigins = corsOriginsFrom(config);
 logger.info({ corsOrigins }, "dashboard origins");
-if (!config.OPERATOR_TOKEN) logger.warn("OPERATOR_TOKEN is not set: the dashboard API (/api) stays closed until it is");
-const app = await buildApp({ db, verifier, logger, simulation, corsOrigins, operatorToken: config.OPERATOR_TOKEN, policyMode: config.POLICY_MODE });
+if (!config.OPERATOR_TOKEN)
+  logger.warn("OPERATOR_TOKEN is not set: the dashboard API (/api) stays closed until it is");
+const app = await buildApp({
+  db,
+  verifier,
+  logger,
+  simulation,
+  corsOrigins,
+  operatorToken: config.OPERATOR_TOKEN,
+  policyMode: config.POLICY_MODE,
+});
 
 const shutdown = async (signal: string) => {
   logger.info({ signal }, "shutting down");

@@ -8,7 +8,12 @@ function storedHeaders(req: FastifyRequest): Record<string, string> {
   const kept: Record<string, string> = {};
   for (const [name, value] of Object.entries(req.headers)) {
     if (value === undefined) continue;
-    if (name.startsWith("paypal-") || name === "content-type" || name === "user-agent" || name === "boomerang-sim-signature") {
+    if (
+      name.startsWith("paypal-") ||
+      name === "content-type" ||
+      name === "user-agent" ||
+      name === "boomerang-sim-signature"
+    ) {
       kept[name] = Array.isArray(value) ? value.join(", ") : value;
     }
   }
@@ -105,7 +110,8 @@ export async function webhookRoutes(app: FastifyInstance, deps: AppDeps): Promis
       }
       const eventId = str(envelope?.id);
       const eventType = str(envelope?.event_type);
-      if (!eventId?.startsWith("WH-SIM-") || !eventType) return reply.code(400).send({ error: "simulated ids must start with WH-SIM-" });
+      if (!eventId?.startsWith("WH-SIM-") || !eventType)
+        return reply.code(400).send({ error: "simulated ids must start with WH-SIM-" });
 
       const inserted = await deps.db.db
         .insert(events)

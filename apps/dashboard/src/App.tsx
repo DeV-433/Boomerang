@@ -11,11 +11,19 @@ const NAV = [
 ];
 
 function HealthBadge() {
-  const health = useQuery({ queryKey: ["healthz"], queryFn: ({ signal }) => api<Health>("/healthz", { signal }), refetchInterval: 30_000 });
+  const health = useQuery({
+    queryKey: ["healthz"],
+    queryFn: ({ signal }) => api<Health>("/healthz", { signal }),
+    refetchInterval: 30_000,
+  });
   const ok = health.data?.status === "ok";
   const label = health.isPending ? "Checking API" : ok ? "API healthy" : "API unreachable";
   return (
-    <span className={`badge ${health.isPending ? "" : ok ? "badge-ok" : "badge-bad"}`} title={API_URL} data-testid="health">
+    <span
+      className={`badge ${health.isPending ? "" : ok ? "badge-ok" : "badge-bad"}`}
+      title={API_URL}
+      data-testid="health"
+    >
       <span className="dot" aria-hidden="true" />
       {label}
     </span>

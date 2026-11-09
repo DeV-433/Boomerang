@@ -186,8 +186,8 @@ No cut line: every phase is in scope (decided 2026-11-09, step 0.7).
 
 ## Phase 6: Operator dashboard (to CP5)
 
-- [ ] **6.1 [M]** Dashboard app skeleton (React, Vite, routing, API client). *Done when:* it loads and calls `/healthz`. _(Built: `apps/dashboard` (React 19, Vite 8, React Router, TanStack Query), CORS on the API from `DASHBOARD_ORIGINS`. Verified locally in headless Chromium: loads, deep links work, badge shows "API healthy". Pending: the deployed static site, once `DASHBOARD_ORIGINS` is set on Render.)_
-- [ ] **6.2 [M]** API: `GET /api/summary`. *Done when:* returns at-risk, recovered, rate and control comparison.
+- [x] **6.1 [M]** Dashboard app skeleton (React, Vite, routing, API client). *Done when:* it loads and calls `/healthz`. _(`apps/dashboard`: React 19, Vite 8, React Router, TanStack Query. Deployed at https://boomerang-dashboard-abv8.onrender.com; verified in headless Chromium: loads, deep links work, the badge shows "API healthy" through CORS (`DASHBOARD_ORIGINS`).)_
+- [x] **6.2 [M]** API: `GET /api/summary`. *Done when:* returns at-risk, recovered, rate and control comparison. _(Behind `OPERATOR_TOKEN`. Live totals per arm for a batch, organic cases, and the latest simulated control run against the agent run (or `?treatmentRun=`). Deployed: `demo-1` simulated control 65.4% vs agent 56.5% (−8.9 points), matching the stored runs; live arms $0 recovered as the batch is not started.)_
 - [ ] **6.3 [M]** Summary screen. *Done when:* numbers match the metrics module for a seeded run.
 - [ ] **6.4 [M]** API: `GET /api/cases` with paging, filters and sorting. *Done when:* server-side paging works on 300 cases.
 - [ ] **6.5 [M]** AG Grid cases screen with columns: customer, lane, amount, cause, state, stage, last contact, next check, recovered amount; row actions to pause, escalate and open the audit trail. *Done when:* sort, filter and paging work.

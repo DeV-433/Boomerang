@@ -27,7 +27,9 @@ export function corsOriginsFrom(config: { DASHBOARD_ORIGINS?: string; NODE_ENV: 
     .split(",")
     .map((o) => o.trim().replace(/\/$/, ""))
     .filter(Boolean);
-  return config.NODE_ENV === "production" ? listed : [...listed, "http://localhost:5173", "http://127.0.0.1:5173"];
+  return config.NODE_ENV === "production"
+    ? listed
+    : [...listed, "http://localhost:5173", "http://127.0.0.1:5173"];
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {

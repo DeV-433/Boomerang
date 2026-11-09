@@ -23,7 +23,16 @@ export interface SimArmMetrics extends ArmTotals {
   escalated?: number;
   heldForApproval?: number;
   modelCostPerRecoveredDollar?: number | null;
-  model?: { all: { calls: number; cachedCalls: number; inputTokens: number; outputTokens: number; thinkingTokens: number; costUsd: number } } | null;
+  model?: {
+    all: {
+      calls: number;
+      cachedCalls: number;
+      inputTokens: number;
+      outputTokens: number;
+      thinkingTokens: number;
+      costUsd: number;
+    };
+  } | null;
 }
 
 export interface SimRunInfo {
@@ -35,7 +44,15 @@ export interface SimRunInfo {
 }
 
 export interface SummaryResponse {
-  batch: { id: string; name: string; seed: string; size: number; mode: string; createdAt: string; startedAt: string | null } | null;
+  batch: {
+    id: string;
+    name: string;
+    seed: string;
+    size: number;
+    mode: string;
+    createdAt: string;
+    startedAt: string | null;
+  } | null;
   /** Real cases in the database for this batch, by arm. Before the batch is started only control-arm baselines change. */
   live: { control: ArmTotals; treatment: ArmTotals; upliftPoints: number | null };
   /** Cases that arrived from PayPal outside any batch. */

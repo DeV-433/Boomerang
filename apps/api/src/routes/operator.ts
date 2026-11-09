@@ -18,13 +18,18 @@ export function tokenMatches(req: FastifyRequest, expected: string): boolean {
  * Everything under /api is for the operator and needs OPERATOR_TOKEN. With no token configured the
  * API stays closed (503) rather than open.
  */
-export async function operatorRoutes(app: FastifyInstance, opts: AppDeps & { prefix?: string }): Promise<void> {
+export async function operatorRoutes(
+  app: FastifyInstance,
+  opts: AppDeps & { prefix?: string },
+): Promise<void> {
   // Child plugins get the deps without the prefix, or they would add "/api" a second time.
   const { prefix: _prefix, ...deps } = opts;
   app.addHook("onRequest", async (req, reply) => {
     if (req.method === "OPTIONS") return; // CORS preflight carries no credentials
-    if (!deps.operatorToken) return reply.code(503).send({ error: "operator access is not configured (OPERATOR_TOKEN)" });
-    if (!tokenMatches(req, deps.operatorToken)) return reply.code(401).send({ error: "missing or wrong operator token" });
+    if (!deps.operatorToken)
+      return reply.code(503).send({ error: "operator access is not configured (OPERATOR_TOKEN)" });
+    if (!tokenMatches(req, deps.operatorToken))
+      return reply.code(401).send({ error: "missing or wrong operator token" });
   });
   await app.register(summaryRoutes, deps);
 }
