@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { auditedTransaction, writeAudit } from "@boomerang/audit";
-import { isContactAction, isEndState, type Action, type Proposal } from "@boomerang/core";
+import { canTransition, isContactAction, isEndState, type Action, type Proposal } from "@boomerang/core";
 import { actions, cases } from "@boomerang/db";
 import {
   cancelInvoiceAutoReminder,
@@ -12,7 +12,7 @@ import {
 import type { Policy } from "@boomerang/policy";
 import { CLOSED_UNPAID_STATUSES, PAID_STATUSES } from "./diagnose";
 import type { CheckResult, LoopDeps } from "./loop";
-import { closeCase, lockCase, scheduleCheck, setState } from "./store";
+import { closeCase, isSystemPaused, lockCase, scheduleCheck, setState } from "./store";
 
 const H = 3_600_000;
 /** Retry a failed PayPal call after this long. */
@@ -78,7 +78,8 @@ async function recheckFailed(
       );
       return;
     }
-    if (c.state !== "awaiting") await setState(tx, f.caseId, c.state, "awaiting");
+    if (c.state !== "awaiting" && canTransition(c.state, "awaiting"))
+      await setState(tx, f.caseId, c.state, "awaiting");
     await scheduleCheck(tx, f.caseId, retryAt, "PayPal re-check failed; trying again");
   });
   return gone
@@ -108,6 +109,27 @@ export async function executeAction(deps: LoopDeps, actionId: string, policy: Po
       at: now,
     });
     return { caseId, outcome: "cancelled", detail: `case is ${current?.state} at execution time` };
+  }
+
+  // 6.11: the global pause wins even over an action the gate passed a moment ago.
+  if (await isSystemPaused(deps.db)) {
+    const retryAt = new Date(now.getTime() + RECHECK_RETRY_MINUTES * 60_000);
+    await auditedTransaction(deps.db, async (tx) => {
+      const c = await lockCase(tx, caseId);
+      await tx.update(actions).set({ status: "cancelled" }).where(eq(actions.id, actionId));
+      await writeAudit(tx, {
+        caseId,
+        actor: "executor",
+        kind: "observed",
+        data: { actionId, cancelled: true, reason: "the operator paused all activity at execution time" },
+        at: now,
+      });
+      if (!c || isEndState(c.state)) return;
+      if (c.state !== "awaiting" && canTransition(c.state, "awaiting"))
+        await setState(tx, caseId, c.state, "awaiting");
+      await scheduleCheck(tx, caseId, retryAt, "system paused at execution time");
+    });
+    return { caseId, outcome: "deferred", detail: "the operator paused all activity; nothing sent" };
   }
 
   // 4.13, part 2: the invoice as PayPal sees it now. Nothing is sent unless this read succeeds.

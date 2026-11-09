@@ -83,17 +83,15 @@ export async function storeEvent(
 ) {
   const id = `WH-TEST-${randomUUID()}`;
   const payload = { id, event_type: type, resource };
-  await db
-    .insert(events)
-    .values({
-      paypalEventId: id,
-      type,
-      payload,
-      rawBody: JSON.stringify(payload),
-      headers: {},
-      source: options.source ?? "webhook",
-      simulated: options.simulated ?? false,
-    });
+  await db.insert(events).values({
+    paypalEventId: id,
+    type,
+    payload,
+    rawBody: JSON.stringify(payload),
+    headers: {},
+    source: options.source ?? "webhook",
+    simulated: options.simulated ?? false,
+  });
   return id;
 }
 

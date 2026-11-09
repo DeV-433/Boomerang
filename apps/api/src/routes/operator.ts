@@ -5,6 +5,7 @@ import { approvalRoutes } from "./approvals";
 import { auditRoutes } from "./audit";
 import { caseRoutes } from "./cases";
 import { summaryRoutes } from "./summary";
+import { systemRoutes } from "./system";
 
 function digest(value: string): Buffer {
   return createHash("sha256").update(value).digest();
@@ -38,4 +39,5 @@ export async function operatorRoutes(
   await app.register(caseRoutes, deps);
   await app.register(auditRoutes, deps);
   await app.register(approvalRoutes, deps);
+  await app.register(systemRoutes, deps);
 }

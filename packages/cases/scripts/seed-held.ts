@@ -65,17 +65,15 @@ try {
   };
   const eventId = `WH-DEV-${randomUUID()}`;
   const payload = { id: eventId, event_type: "BOOMERANG.INVOICE.OVERDUE", resource: { invoice } };
-  await db.db
-    .insert(events)
-    .values({
-      paypalEventId: eventId,
-      type: payload.event_type,
-      payload,
-      rawBody: JSON.stringify(payload),
-      headers: {},
-      source: "poll",
-      simulated: true,
-    });
+  await db.db.insert(events).values({
+    paypalEventId: eventId,
+    type: payload.event_type,
+    payload,
+    rawBody: JSON.stringify(payload),
+    headers: {},
+    source: "poll",
+    simulated: true,
+  });
   await processPendingEvents(db.db, { now: () => now });
   const [c] = await db.db.select().from(cases).where(eq(cases.paypalRef, ref));
   if (!c) throw new Error("case was not opened");
@@ -99,19 +97,17 @@ try {
       classification: "question",
     },
   };
-  await db.db
-    .insert(events)
-    .values({
-      paypalEventId: replyId,
-      type: reply.event_type,
-      payload: reply,
-      rawBody: JSON.stringify(reply),
-      headers: {},
-      source: "simulated",
-      simulated: true,
-      caseId: c.id,
-      processedAt: now,
-    });
+  await db.db.insert(events).values({
+    paypalEventId: replyId,
+    type: reply.event_type,
+    payload: reply,
+    rawBody: JSON.stringify(reply),
+    headers: {},
+    source: "simulated",
+    simulated: true,
+    caseId: c.id,
+    processedAt: now,
+  });
 
   console.log(
     JSON.stringify({

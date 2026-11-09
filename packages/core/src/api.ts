@@ -236,3 +236,12 @@ export interface ApprovalDecisionResponse {
   outcome: string;
   detail: string | null;
 }
+
+// 6.11: global pause ----------------------------------------------------------------------------------
+
+export interface SystemStatus {
+  paused: boolean;
+  pausedBy: string | null;
+  changedAt: string | null;
+  mode: "dry_run" | "live";
+}

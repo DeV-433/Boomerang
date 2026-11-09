@@ -97,15 +97,13 @@ describe.skipIf(!hasTestDb)("event processing: subscription payment failed", () 
 
   it("marks event types with no handler as processed, linked to no case", async () => {
     const id = `WH-${randomUUID()}`;
-    await h.db
-      .insert(events)
-      .values({
-        paypalEventId: id,
-        type: "INVOICING.INVOICE.CREATED",
-        payload: {},
-        rawBody: "{}",
-        headers: {},
-      });
+    await h.db.insert(events).values({
+      paypalEventId: id,
+      type: "INVOICING.INVOICE.CREATED",
+      payload: {},
+      rawBody: "{}",
+      headers: {},
+    });
     await processPendingEvents(h.db);
     const [row] = await h.db.select().from(events).where(eq(events.paypalEventId, id));
     expect(row!.processedAt).not.toBeNull();

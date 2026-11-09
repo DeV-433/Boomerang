@@ -306,6 +306,41 @@ describe.skipIf(!hasTestDb)("the core loop without AI (Phase 4)", () => {
     expect(tool(fake, "send_invoice_reminder")).toHaveLength(0);
   });
 
+  it("does not send an already-approved action once the operator pauses everything", async () => {
+    const fake = fakePayPal();
+    const c = await openInvoiceCase();
+    await h.db.update(cases).set({ state: "proposed" }).where(eq(cases.id, c.id)); // as the loop leaves it at send time
+    const [action] = await h.db
+      .insert(actions)
+      .values({
+        caseId: c.id,
+        action: "send_reminder",
+        proposedBy: "rules",
+        reason: "test",
+        confidence: 0.9,
+        status: "approved",
+        message: { subject: "s", body: "b", tone: "friendly", template: "reminder" },
+      })
+      .returning();
+    await setSystemPaused(h.db, true, "operator:test");
+    try {
+      const result = await executeAction(
+        live(fake, TUESDAY_10AM_NY),
+        action!.id,
+        await loadPolicy(h.db, "live"),
+      );
+      expect(result).toMatchObject({ outcome: "deferred" });
+      expect(tool(fake, "send_invoice_reminder")).toHaveLength(0);
+      expect((await h.db.select().from(actions).where(eq(actions.id, action!.id)))[0]!.status).toBe(
+        "cancelled",
+      );
+      expect(await pendingJobs(c.id)).toHaveLength(1);
+      expect((await caseByRef(h.db, c.paypalRef)).state).toBe("awaiting");
+    } finally {
+      await setSystemPaused(h.db, false, "operator:test");
+    }
+  });
+
   it("stops a case when a person rejects the held action", async () => {
     const c = await openInvoiceCase(450_000);
     await runCaseCheck(live(fakePayPal(), TUESDAY_10AM_NY), c.id);

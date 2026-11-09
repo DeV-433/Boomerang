@@ -521,3 +521,19 @@ button.danger {
   margin: 4px 0 0;
   padding-left: 18px;
 }
+.pause-button {
+  font-size: 12px;
+  padding: 3px 10px;
+  color: var(--bad);
+  border-color: var(--bad);
+}
+.pause-button.resume {
+  background: var(--bad);
+  color: #fff;
+}
+.paused-banner {
+  background: var(--bad);
+  color: #fff;
+  padding: 8px 20px;
+  font-size: 13px;
+}

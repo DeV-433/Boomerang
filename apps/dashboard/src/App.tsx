@@ -8,6 +8,7 @@ import { Approvals } from "./pages/Approvals";
 import { Audit } from "./pages/Audit";
 import { Cases } from "./pages/Cases";
 import { Summary } from "./pages/Summary";
+import { PauseButton, PausedBanner } from "./SystemControl";
 
 const NAV = [
   { to: "/", label: "Summary" },
@@ -50,12 +51,14 @@ export function App() {
           ))}
         </nav>
         <HealthBadge />
+        {token && <PauseButton />}
         {token && (
           <button className="link-button" onClick={() => setToken(null)}>
             Sign out
           </button>
         )}
       </header>
+      {token && <PausedBanner />}
       <main className="content">
         {!token ? (
           <SignIn />
