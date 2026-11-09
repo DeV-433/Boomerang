@@ -26,7 +26,7 @@ Built and demonstrated against the **PayPal sandbox** only.
 | --- | --- |
 | Message delivery (plan 0.6) | PayPal's own invoice-reminder tool plus logging. No real email or SMS. |
 | Scope (plan 0.7) | Every phase is built, Phases 0 to 10. No cut line. |
-| Model | Groq (`GROQ_API_KEY`), called only from `packages/agent`: `openai/gpt-oss-120b` decides, `openai/gpt-oss-20b` drafts and classifies (and is the fallback). Both support strict JSON-schema outputs. Switched from Gemini on 2026-11-09 after overload and per-minute quota stalls. |
+| Model | Groq (`GROQ_API_KEY`), called only from `packages/agent`: `openai/gpt-oss-120b` decides and classifies replies, `openai/gpt-oss-20b` drafts (and is the fallback). Both support strict JSON-schema outputs. Switched from Gemini on 2026-11-09 after overload and per-minute quota stalls. |
 | CI (plan 1.2) | GitHub Actions is unavailable on this account, so a `pre-push` hook runs lint, type-check, migrations and all tests, and blocks the push on failure. Render deploys on every push to `main`. |
 
 ### Licensing (plan 0.5)

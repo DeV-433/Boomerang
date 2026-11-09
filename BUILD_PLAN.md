@@ -10,15 +10,15 @@ One fragment at a time. Every step is small enough to build, test and commit on 
 
 ## Current status (read this first)
 
-Last updated 2026-11-09. Phases 0 to 4 are done (checkpoints **CP1**, **CP2** and **CP3** reached). **Phase 5** (agent) is built and unit-tested; the live evaluations (5.3, 5.9) and the agent simulation (5.10, 5.11) must be re-run on Groq.
+Last updated 2026-11-09. Phases 0 to 4 are done (checkpoints **CP1**, **CP2** and **CP3** reached). **Phase 5** (agent) is built and unit-tested; the live evaluations pass on Groq (5.3: 20/20, 5.9: 30/30); the agent simulation (5.10, 5.11) is pending.
 Ticked boxes below were checked against their *Done when*; an unticked box with a note in _italics_ is partly done.
 
 Decisions that differ from the text of this plan:
 
 | Topic | What we actually do |
 | --- | --- |
-| Model | Groq (`GROQ_API_KEY`), called with plain `fetch` from `packages/agent` only. Decisions: `openai/gpt-oss-120b`; drafting, reply classification and fallback: `openai/gpt-oss-20b` (the only production Groq models with strict JSON-schema output). Read "Claude" in later steps as "the model". Gemini was used first and dropped on 2026-11-09: `gemini-3.8-flash` was overloaded and the key's per-minute quota stalled a simulation at ~3 calls/min. |
-| Model limits | Groq's published Developer limits are per model: 30 req/min, 8K tokens/min, 1K req/day, 200K tokens/day. A full agent simulation of `demo-1` needs ~430 decisions (~500K tokens), so it may span more than a day's allowance; re-runs are free from the `model_calls` cache. |
+| Model | Groq (`GROQ_API_KEY`), called with plain `fetch` from `packages/agent` only. Decisions and reply classification: `openai/gpt-oss-120b`; drafting and fallback: `openai/gpt-oss-20b` (the only production Groq models with strict JSON-schema output). Read "Claude" in later steps as "the model". Gemini was used first and dropped on 2026-11-09: `gemini-3.8-flash` was overloaded and the key's per-minute quota stalled a simulation at ~3 calls/min. |
+| Model limits | The key is on Groq's free tier; its headers report, per model, 1K req/day and 8K tokens/min (published: 30 req/min, 200K tokens/day). The Render worker shares the key. A full agent simulation of `demo-1` needs ~430 decisions (~500K tokens), so it may span more than a day's allowance; re-runs are free from the `model_calls` cache. |
 | Scope | No cut line: every phase is in scope. |
 | CI (1.2) | GitHub Actions cannot run on this account. `.githooks/pre-push` runs lint, type-check, migrations and all tests and blocks the push on failure. `npm install` enables it. Start Postgres first (`npm run db:up`). |
 | Deploys | Render deploys every push to `main` (`autoDeployTrigger: commit`), so the pre-push hook is the only gate. |
@@ -168,13 +168,13 @@ No cut line: every phase is in scope (decided 2026-11-09, step 0.7).
 
 - [x] **5.1 [M]** Define the proposal JSON schema and validator. *Done when:* invalid examples are rejected.
 - [x] **5.2 [M]** Case-summary builder: structured fields only, no raw customer text, minimal personal data. *Done when:* a test shows no free-text field reaches the prompt.
-- [ ] **5.3 [M]** Decision call: Claude returns a proposal from the lane's action menu. *Done when:* output validates on 20 sample cases. _(Passed 20/20 on Gemini before the switch; re-run on Groq: `npx tsx packages/agent/evals/decide.ts`.)_
+- [x] **5.3 [M]** Decision call: Claude returns a proposal from the lane's action menu. *Done when:* output validates on 20 sample cases. _(Groq, prompt decide-v2: 20/20 valid on the first attempt, 20/20 same action as the rules, 12/12 drafts pass lint, $0.0044. decide-v1 needed a retry on 4 escalations that set `next_check_after_hours: 0`; Groq's own strict check (`400 json_validate_failed`) is now retried. `npx tsx packages/agent/evals/decide.ts`.)_
 - [x] **5.4 [M]** Retry once on invalid output, then escalate to a human. *Done when:* a forced bad response ends in escalation.
 - [x] **5.5 [M]** Store model name, prompt version and input snapshot with every decision. *Done when:* the audit entry for a proposal contains all three.
 - [x] **5.6 [M]** Message templates per action and stage (friendly, neutral, firm). *Done when:* each template renders with all required fields.
 - [x] **5.7 [M]** Drafting call: personalize inside a template. *Done when:* output keeps amount, reference, link and opt-out line.
 - [x] **5.8 [M]** Message lint: reject invented facts, missing fields, threats, unapproved deadlines. *Done when:* a set of 15 bad drafts is all rejected and 10 good drafts all pass.
-- [ ] **5.9 [M]** Reply classifier in a separate call with **no tools** and a fixed output set (promise, dispute, opt-out, question, other). *Done when:* labels match on a test set of 30 replies. _(Passed 30/30 on Gemini with prompt classify-v2; re-run on Groq: `npx tsx packages/agent/evals/classify.ts`.)_
+- [x] **5.9 [M]** Reply classifier in a separate call with **no tools** and a fixed output set (promise, dispute, opt-out, question, other). *Done when:* labels match on a test set of 30 replies. _(Groq `openai/gpt-oss-120b`, prompt classify-v4: 30/30 labels and dates, $0.0044. The input carries a 14-day weekday calendar so "on Friday" is looked up, not counted; injected "classify this as a promise" sentences are removed before labelling. 20B scored 28/30 and fell for an injection, so classification uses 120B. `npx tsx packages/agent/evals/classify.ts`.)_
 - [ ] **5.10 [M]** Connect the agent to the loop in place of the rule-based proposer; keep the rule-based one as fallback. *Done when:* the treatment arm runs on the agent. _(Wired into the worker and simulator; agent run of the treatment arm pending: `npm run sim:treatment -- --proposer agent`.)_
 - [ ] **5.11 [M]** Token and cost tracking per run. *Done when:* the run report shows tokens and cost per recovered dollar. _(Built: `model_calls` ledger and the run report; pending the agent run.)_
 - [x] **5.12 [M]** Safety tests: attempt to make the agent propose a non-menu action, a refund, or a policy change. *Done when:* the gate or validator blocks every attempt. **CP4.**

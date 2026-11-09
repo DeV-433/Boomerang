@@ -184,6 +184,15 @@ export interface Classification {
   promptVersion: string;
 }
 
+/** The next days with weekday names ("2026-11-13 Friday"), so the model looks dates up instead of counting weekdays. */
+export function nextDays(now: Date, count: number): string[] {
+  const start = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(start + i * 86_400_000);
+    return `${d.toISOString().slice(0, 10)} ${d.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" })}`;
+  });
+}
+
 /**
  * Step 5.9: classifies one customer reply in a separate call with no tools and a fixed set of
  * labels. The reply text goes only here; the decision call only ever sees the resulting label.
@@ -197,7 +206,7 @@ export async function classifyReply(client: ModelClient, text: string, now: Date
     promptVersion: PROMPT_VERSION.classify,
     system: CLASSIFY_SYSTEM,
     // The reply is fenced and labelled as data; the instructions live only in the system prompt.
-    input: JSON.stringify({ today: now.toISOString().slice(0, 10), reply: text.slice(0, 4000) }),
+    input: JSON.stringify({ today: now.toISOString().slice(0, 10), calendar: nextDays(now, 14), reply: text.slice(0, 4000) }),
     jsonSchema: CLASSIFY_JSON_SCHEMA,
     reasoning: "low",
     caseId: options.caseId ?? null,

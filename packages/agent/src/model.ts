@@ -58,13 +58,14 @@ export const PRICES: Record<string, { input: number; output: number }> = {
 
 /**
  * Model choice (2026-11-09): of Groq's production models, only gpt-oss-120b and gpt-oss-20b
- * support strict JSON-schema outputs (constrained decoding). The larger model makes the decision;
- * the faster, cheaper one drafts the personal note and classifies replies, which also spreads load
- * across two per-model rate limits. Each call falls back to FALLBACK_MODEL if its primary fails.
+ * support strict JSON-schema outputs (constrained decoding). The larger model makes the decision and
+ * classifies replies (it reads untrusted customer text; 20B fell for an injection in the eval). The
+ * faster, cheaper one drafts the personal note, which also spreads load across two per-model rate
+ * limits. Each call falls back to FALLBACK_MODEL if its primary fails.
  */
 export const DECISION_MODEL = "openai/gpt-oss-120b";
 export const DRAFT_MODEL = "openai/gpt-oss-20b";
-export const CLASSIFY_MODEL = "openai/gpt-oss-20b";
+export const CLASSIFY_MODEL = "openai/gpt-oss-120b";
 export const FALLBACK_MODEL = "openai/gpt-oss-20b";
 /** A call that has not answered by now is abandoned and retried (or sent to the fallback model). */
 export const CALL_TIMEOUT_MS = 30_000;
@@ -228,7 +229,8 @@ export class GroqClient implements ModelClient {
       const body = (await res.text()).slice(0, 400);
       const retryAfterMs =
         res.status === 429 ? (parseDuration(res.headers.get("retry-after")) ?? parseDuration(res.headers.get("x-ratelimit-reset-tokens")) ?? 15_000) : null;
-      const retryable = res.status === 429 || res.status >= 500;
+      // json_validate_failed: Groq's own strict-mode check rejected this sample. Generation is random, so another try can pass.
+      const retryable = res.status === 429 || res.status >= 500 || body.includes('"json_validate_failed"');
       throw new ModelCallError(`${model} ${req.kind} failed (${res.status}): ${body}`, retryable, retryAfterMs);
     }
 

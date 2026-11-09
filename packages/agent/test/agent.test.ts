@@ -5,7 +5,7 @@ import { diagnose, processPendingEvents, runCaseCheck, type CaseSnapshot } from 
 import { OPT_OUT_LINE } from "@boomerang/core";
 import { actions, auditLog, cases, customers, events, type DbHandle } from "@boomerang/db";
 import { hasTestDb, setupTestDb } from "@boomerang/db/testing";
-import { agentProposer, classifyReply, decide } from "../src/agent";
+import { agentProposer, classifyReply, decide, nextDays } from "../src/agent";
 import { ModelCallError, type ModelClient, type ModelRequest } from "../src/model";
 import { validateDecision } from "../src/schema";
 import { buildCaseSummary } from "../src/summary";
@@ -119,7 +119,7 @@ describe("decision call (5.3 to 5.5) and drafting (5.7)", () => {
     const s = snap();
     const p = await decide({ client }, s, diagnose(s, NOW), NOW);
     expect(p).toMatchObject({ action: "send_reminder", proposedBy: "agent:openai/gpt-oss-120b", confidence: 0.85, cause: "overdue_no_engagement" });
-    expect(p.meta).toMatchObject({ model: "openai/gpt-oss-120b", promptVersion: "decide-v1", attempts: 1 });
+    expect(p.meta).toMatchObject({ model: "openai/gpt-oss-120b", promptVersion: "decide-v2", attempts: 1 });
     expect(p.meta?.input).toMatchObject({ case_id: s.id, lane: "invoice", stage: 0 });
     expect(p.meta?.usage?.costUsd).toBeGreaterThan(0);
   });
@@ -254,7 +254,7 @@ describe.skipIf(!hasTestDb)("agent inside the real loop and gate", () => {
     const trail = await h.db.select().from(auditLog).where(eq(auditLog.caseId, c.id)).orderBy(asc(auditLog.id));
     const entry = trail.find((e) => e.kind === "proposed")!;
     expect(entry.actor).toBe("agent:openai/gpt-oss-120b");
-    expect(entry.data).toMatchObject({ model: "openai/gpt-oss-120b", promptVersion: "decide-v1", inputSnapshot: { case_id: c.id, lane: "invoice", stage: 0 } });
+    expect(entry.data).toMatchObject({ model: "openai/gpt-oss-120b", promptVersion: "decide-v2", inputSnapshot: { case_id: c.id, lane: "invoice", stage: 0 } });
     expect(proposed).toBeDefined();
   });
 
@@ -313,5 +313,11 @@ describe.skipIf(!hasTestDb)("reply classification in the loop (5.9 wiring)", () 
     const trail = await h.db.select().from(auditLog).where(eq(auditLog.caseId, c!.id));
     expect(JSON.stringify(trail.map((t) => t.data))).not.toMatch(/IGNORE|refund me/);
     expect(JSON.stringify(trail.map((t) => t.data))).toContain('"classification":"opt_out"');
+  });
+});
+
+describe("classifier calendar", () => {
+  it("lists the coming days with weekday names, starting today", () => {
+    expect(nextDays(new Date("2026-11-10T23:30:00Z"), 4)).toEqual(["2026-11-10 Tuesday", "2026-11-11 Wednesday", "2026-11-12 Thursday", "2026-11-13 Friday"]);
   });
 });

@@ -4,7 +4,7 @@ import { GroqClient, GROQ_URL, parseDuration, type FetchLike, type ModelRequest 
 const req: ModelRequest = {
   kind: "decide",
   model: "openai/gpt-oss-120b",
-  promptVersion: "decide-v1",
+  promptVersion: "decide-v2",
   system: "system prompt",
   input: '{"case":{}}',
   jsonSchema: { type: "object", properties: { a: { type: "string" } }, required: ["a"], additionalProperties: false },
@@ -72,6 +72,15 @@ describe("Groq client", () => {
     const { fetchFn, calls } = scriptedFetch([new Response('{"error":{"message":"invalid schema"}}', { status: 400 })]);
     await expect(new GroqClient("key", { fetchFn, sleep: async () => {} }).generate(req)).rejects.toMatchObject({ retryable: false });
     expect(calls).toHaveLength(1);
+  });
+
+  it("retries when Groq's strict-mode check rejects a generation", async () => {
+    const { fetchFn, calls } = scriptedFetch([
+      new Response('{"error":{"message":"Failed to generate JSON.","type":"invalid_request_error","code":"json_validate_failed"}}', { status: 400 }),
+      ok('{"a":"x"}'),
+    ]);
+    expect((await new GroqClient("key", { fetchFn, sleep: async () => {} }).generate(req)).text).toBe('{"a":"x"}');
+    expect(calls).toHaveLength(2);
   });
 
   it("treats a timeout as retryable", async () => {

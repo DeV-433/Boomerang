@@ -51,7 +51,7 @@ export function decisionJsonSchema(lane: Lane): Record<string, unknown> {
       reason: { type: "string", description: "One or two sentences on why this action fits this case now." },
       // Ranges (0..1, 1..720) are checked by DecisionSchema; Groq strict mode documents only types and enums.
       confidence: { type: "number" },
-      next_check_after_hours: { type: "integer" },
+      next_check_after_hours: { type: "integer", description: "Whole hours from 1 to 720 (never 0; use 24 when escalating)." },
     },
     required: ["case_id", "cause", "action", "reason", "confidence", "next_check_after_hours"],
     additionalProperties: false,
