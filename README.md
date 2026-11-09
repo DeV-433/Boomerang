@@ -2,7 +2,8 @@
 
 An AI agent that finds PayPal revenue at risk, chooses a recovery action for each case, carries it out within strict policy limits, and reports the money it won back.
 
-> Work in progress. This README will be expanded as the build progresses.
+> Work in progress. Build progress, the next step and every decision so far are tracked in
+> [`BUILD_PLAN.md`](BUILD_PLAN.md): start with its **Current status** section.
 
 ## Overview
 
