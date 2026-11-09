@@ -14,13 +14,14 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json",
     "test": "npm run test --workspaces --if-present",
-    "ci": "npm run lint && npm run typecheck && npm test",
+    "ci": "npm run lint && npm run typecheck && npm run db:migrate && npm test",
     "db:up": "docker compose up -d db",
     "db:down": "docker compose down",
     "db:generate": "npm run generate -w @boomerang/db",
     "db:migrate": "npm run migrate -w @boomerang/db",
     "dev:api": "npm run dev -w @boomerang/api",
-    "dev:worker": "npm run dev -w @boomerang/worker"
+    "dev:worker": "npm run dev -w @boomerang/worker",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
