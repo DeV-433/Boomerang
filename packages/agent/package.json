@@ -13,6 +13,7 @@
     "@boomerang/cases": "*",
     "@boomerang/core": "*",
     "@boomerang/db": "*",
+    "@boomerang/policy": "*",
     "drizzle-orm": "0.45.4",
     "zod": "4.6.7"
   }

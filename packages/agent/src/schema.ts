@@ -30,12 +30,18 @@ export function validateDecision(raw: string, expected: { caseId: string; lane: 
     return { ok: false, errors: ["reply is not valid JSON"] };
   }
   const parsed = DecisionSchema.safeParse(json);
-  if (!parsed.success) return { ok: false, errors: parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`) };
+  if (!parsed.success)
+    return {
+      ok: false,
+      errors: parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`),
+    };
   const d = parsed.data;
   const errors: string[] = [];
   if (d.case_id !== expected.caseId) errors.push(`case_id must be "${expected.caseId}"`);
   if (!(ACTION_MENUS[expected.lane] as readonly string[]).includes(d.action)) {
-    errors.push(`action "${d.action}" is not on the ${expected.lane} menu: ${ACTION_MENUS[expected.lane].join(", ")}`);
+    errors.push(
+      `action "${d.action}" is not on the ${expected.lane} menu: ${ACTION_MENUS[expected.lane].join(", ")}`,
+    );
   }
   return errors.length ? { ok: false, errors } : { ok: true, decision: d };
 }
@@ -51,7 +57,10 @@ export function decisionJsonSchema(lane: Lane): Record<string, unknown> {
       reason: { type: "string", description: "One or two sentences on why this action fits this case now." },
       // Ranges (0..1, 1..720) are checked by DecisionSchema; Groq strict mode documents only types and enums.
       confidence: { type: "number" },
-      next_check_after_hours: { type: "integer", description: "Whole hours from 1 to 720 (never 0; use 24 when escalating)." },
+      next_check_after_hours: {
+        type: "integer",
+        description: "Whole hours from 1 to 720 (never 0; use 24 when escalating).",
+      },
     },
     required: ["case_id", "cause", "action", "reason", "confidence", "next_check_after_hours"],
     additionalProperties: false,
@@ -63,7 +72,9 @@ export function decisionJsonSchema(lane: Lane): Record<string, unknown> {
 export const DraftSchema = z.object({ personal_note: z.string().max(280) }).strict();
 export const DRAFT_JSON_SCHEMA = {
   type: "object",
-  properties: { personal_note: { type: "string", description: "At most two short sentences, or an empty string." } },
+  properties: {
+    personal_note: { type: "string", description: "At most two short sentences, or an empty string." },
+  },
   required: ["personal_note"],
   additionalProperties: false,
 };
@@ -73,13 +84,22 @@ export const DRAFT_JSON_SCHEMA = {
 export const REPLY_LABELS = ["promise", "dispute", "opt_out", "question", "other"] as const;
 export type ReplyLabel = (typeof REPLY_LABELS)[number];
 export const ClassificationSchema = z
-  .object({ label: z.enum(REPLY_LABELS), promise_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable() })
+  .object({
+    label: z.enum(REPLY_LABELS),
+    promise_date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable(),
+  })
   .strict();
 export const CLASSIFY_JSON_SCHEMA = {
   type: "object",
   properties: {
     label: { type: "string", enum: [...REPLY_LABELS] },
-    promise_date: { type: ["string", "null"], description: "yyyy-MM-dd if the customer names a payment date, else null" },
+    promise_date: {
+      type: ["string", "null"],
+      description: "yyyy-MM-dd if the customer names a payment date, else null",
+    },
   },
   required: ["label", "promise_date"],
   additionalProperties: false,

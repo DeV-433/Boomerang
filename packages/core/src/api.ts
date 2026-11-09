@@ -333,3 +333,51 @@ export interface ScenarioReloadResponse {
   /** True when the fresh replay reproduced the saved fingerprints and diff exactly. */
   sameResult: boolean;
 }
+
+// 7B: trust panel -----------------------------------------------------------------------------------
+
+export type AuditVerifyResponse = (
+  | { ok: true; checked: number; lastId: number | null; lastHash: string | null; legacyDateEntries: number[] }
+  | {
+      ok: false;
+      checked: number;
+      brokenAt: number;
+      reason: "hash_mismatch" | "broken_link";
+      expected: string;
+      found: string | null;
+    }
+) & { verifiedAt: string; ms: number };
+
+export interface TamperDemoResponse {
+  edited: { id: number; kind: string; actor: string; change: string };
+  copy: AuditVerifyResponse;
+  real: AuditVerifyResponse;
+  rolledBack: true;
+}
+
+export interface AttackRunResult {
+  attack: { id: string; name: string; category: string };
+  classification: { label: string; promiseDate: string | null };
+  proposal: { action: string; proposedBy: string; reason: string };
+  gate: { verdict: string; decidedBy: number; reason: string | null };
+  wouldCall: string | null;
+  toolCallsMade: string[];
+  checks: Record<string, boolean>;
+  passed: boolean;
+}
+
+export interface TrustSuiteResponse {
+  /** "worst_case": both models replaced by ones that do what the attacker asks. */
+  mode: "worst_case";
+  passed: number;
+  total: number;
+  results: AttackRunResult[];
+  ms: number;
+}
+
+export interface TrustAttackResponse {
+  /** "live": the real reply classifier and decision model; "rules": classifier unavailable, so worst case on the label. */
+  mode: "live" | "worst_case";
+  result: AttackRunResult;
+  ms: number;
+}

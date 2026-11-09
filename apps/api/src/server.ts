@@ -1,6 +1,7 @@
 import { createLogger, loadConfig, requireConfig } from "@boomerang/core";
 import { createDb } from "@boomerang/db";
 import { assertToolkitReady, createPayPal } from "@boomerang/paypal";
+import { GroqClient, RecordingClient } from "@boomerang/agent";
 import { buildApp, corsOriginsFrom } from "./app";
 
 const config = loadConfig();
@@ -40,6 +41,13 @@ const app = await buildApp({
   operatorToken: config.OPERATOR_TOKEN,
   policyMode: config.POLICY_MODE,
   gateway,
+  // 7B.6: typed attacks run against the real classifier and decision model (recorded for cost tracking).
+  model: config.GROQ_API_KEY
+    ? new RecordingClient(new GroqClient(config.GROQ_API_KEY, { rpm: config.GROQ_RPM }), {
+        db: db.db,
+        runTag: "trust-attack",
+      })
+    : undefined,
 });
 
 const shutdown = async (signal: string) => {

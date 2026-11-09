@@ -116,11 +116,9 @@ export async function whatIfRoutes(app: FastifyInstance, deps: AppDeps): Promise
       .strict()
       .safeParse(req.body ?? {});
     if (!parsed.success)
-      return reply
-        .code(400)
-        .send({
-          error: parsed.error.issues.map((i) => `${i.path.join(".") || "body"}: ${i.message}`).join("; "),
-        });
+      return reply.code(400).send({
+        error: parsed.error.issues.map((i) => `${i.path.join(".") || "body"}: ${i.message}`).join("; "),
+      });
     let entry: Cached;
     try {
       entry = await baseFor(parsed.data.batch);

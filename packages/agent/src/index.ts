@@ -1,4 +1,11 @@
-export { decide, agentProposer, classifyReply, templateFor, type AgentOptions, type Classification } from "./agent";
+export {
+  decide,
+  agentProposer,
+  classifyReply,
+  templateFor,
+  type AgentOptions,
+  type Classification,
+} from "./agent";
 export {
   GroqClient,
   parseDuration,
@@ -20,7 +27,22 @@ export {
   type Usage,
   type CallKind,
 } from "./model";
-export { validateDecision, decisionJsonSchema, DecisionSchema, REPLY_LABELS, type Decision, type ReplyLabel } from "./schema";
+export {
+  validateDecision,
+  decisionJsonSchema,
+  DecisionSchema,
+  REPLY_LABELS,
+  type Decision,
+  type ReplyLabel,
+} from "./schema";
 export { buildCaseSummary, type CaseSummary } from "./summary";
 export { PROMPT_VERSION } from "./prompts";
 export { classifyPendingReplies, REPLY_EVENT } from "./replies";
+export {
+  ATTACK_SUITE,
+  runAttack,
+  compromisedClient,
+  type Attack,
+  type AttackResult,
+  type AttackCategory,
+} from "./trust";

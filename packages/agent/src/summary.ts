@@ -40,7 +40,20 @@ const KNOWN_REASON_CODES = [
   "CURRENCY_MISMATCH",
   "PAYEE_ACCOUNT_RESTRICTED",
 ];
-const KNOWN_STATUSES = ["DRAFT", "SENT", "UNPAID", "PARTIALLY_PAID", "PAID", "MARKED_AS_PAID", "CANCELLED", "REFUNDED", "ACTIVE", "SUSPENDED", "EXPIRED", "APPROVAL_PENDING"];
+const KNOWN_STATUSES = [
+  "DRAFT",
+  "SENT",
+  "UNPAID",
+  "PARTIALLY_PAID",
+  "PAID",
+  "MARKED_AS_PAID",
+  "CANCELLED",
+  "REFUNDED",
+  "ACTIVE",
+  "SUSPENDED",
+  "EXPIRED",
+  "APPROVAL_PENDING",
+];
 
 const DAY = 86_400_000;
 const days = (from: Date, to: Date) => Math.max(0, Math.floor((to.getTime() - from.getTime()) / DAY));
@@ -50,7 +63,8 @@ function band(cents: number): CaseSummary["amount_band"] {
   return d < 100 ? "under_100" : d < 500 ? "100_to_500" : d < 2000 ? "500_to_2000" : "over_2000";
 }
 
-const closed = (value: string | null, allowed: readonly string[]) => (value === null ? null : allowed.includes(value) ? value : "OTHER");
+const closed = (value: string | null, allowed: readonly string[]) =>
+  value === null ? null : allowed.includes(value) ? value : "OTHER";
 
 export function buildCaseSummary(s: CaseSnapshot, diagnosis: Diagnosis, now: Date): CaseSummary {
   const today = now.toISOString().slice(0, 10);
@@ -62,7 +76,10 @@ export function buildCaseSummary(s: CaseSnapshot, diagnosis: Diagnosis, now: Dat
     amount_band: band(s.amountCents),
     stage: s.contacts,
     max_stages: MAX_CONTACT_STAGES,
-    days_overdue: s.lane === "invoice" && s.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(s.dueDate) ? days(new Date(`${s.dueDate}T00:00:00Z`), now) : null,
+    days_overdue:
+      s.lane === "invoice" && s.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(s.dueDate)
+        ? days(new Date(`${s.dueDate}T00:00:00Z`), now)
+        : null,
     days_since_last_contact: s.lastContactAt ? days(s.lastContactAt, now) : null,
     // Only the closed cause label. The rule's explanation can quote fields from outside (a PayPal
     // reason code), and a test once caught an instruction smuggled through it.
@@ -70,7 +87,10 @@ export function buildCaseSummary(s: CaseSnapshot, diagnosis: Diagnosis, now: Dat
     paypal_status: closed(s.paypalStatus?.toUpperCase() ?? null, KNOWN_STATUSES),
     failed_payments: s.lane === "subscription" ? s.failedPayments : null,
     failure_reason: s.lane === "subscription" ? closed(s.lastFailureReason, KNOWN_REASON_CODES) : null,
-    promise: s.promiseDate && /^\d{4}-\d{2}-\d{2}$/.test(s.promiseDate) ? { date: s.promiseDate, status: s.promiseDate >= today ? "upcoming" : "missed" } : null,
+    promise:
+      s.promiseDate && /^\d{4}-\d{2}-\d{2}$/.test(s.promiseDate)
+        ? { date: s.promiseDate, status: s.promiseDate >= today ? "upcoming" : "missed" }
+        : null,
     disputed: s.disputed,
     opted_out: s.optedOut,
     customer_timezone_known: Boolean(s.customerTimezone),

@@ -6,6 +6,7 @@ import { auditRoutes } from "./audit";
 import { caseRoutes } from "./cases";
 import { summaryRoutes } from "./summary";
 import { systemRoutes } from "./system";
+import { trustRoutes } from "./trust";
 import { whatIfRoutes } from "./whatif";
 
 function digest(value: string): Buffer {
@@ -42,4 +43,5 @@ export async function operatorRoutes(
   await app.register(approvalRoutes, deps);
   await app.register(systemRoutes, deps);
   await app.register(whatIfRoutes, deps);
+  await app.register(trustRoutes, deps);
 }

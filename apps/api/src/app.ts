@@ -2,6 +2,7 @@ import cors from "@fastify/cors";
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from "fastify";
 import type { Logger } from "@boomerang/core";
 import type { DbHandle } from "@boomerang/db";
+import type { ModelClient } from "@boomerang/agent";
 import type { PayPalGateway, WebhookVerifier } from "@boomerang/paypal";
 import { healthRoutes } from "./routes/health";
 import { operatorRoutes } from "./routes/operator";
@@ -19,6 +20,8 @@ export interface AppDeps {
   operatorToken?: string;
   /** For approved actions (6.9). Absent: offline, contacts are recorded as dry runs. */
   gateway?: PayPalGateway;
+  /** The reply classifier and decision model, for live attack runs on the trust panel (7B.6). */
+  model?: ModelClient;
   /** Clock for decisions (tests pin it; production uses the real time). */
   now?: () => Date;
   /** POLICY_MODE, reported to the dashboard. */

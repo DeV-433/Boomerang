@@ -12,6 +12,8 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@boomerang/agent": "*",
+    "@boomerang/audit": "*",
     "@boomerang/cases": "*",
     "@boomerang/core": "*",
     "@boomerang/db": "*",

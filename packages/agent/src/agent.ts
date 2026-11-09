@@ -1,6 +1,29 @@
-import { lintMessage, toneForStage, type Action, type Proposal, type ProposalMeta, type TemplateId } from "@boomerang/core";
-import { messageFacts, proposeByRules, renderMessage, type CaseSnapshot, type Diagnosis, type Proposer } from "@boomerang/cases";
-import { CLASSIFY_MODEL, costUsd, DECISION_MODEL, DRAFT_MODEL, ModelCallError, type ModelClient, type ModelRequest, type Usage } from "./model";
+import {
+  lintMessage,
+  toneForStage,
+  type Action,
+  type Proposal,
+  type ProposalMeta,
+  type TemplateId,
+} from "@boomerang/core";
+import {
+  messageFacts,
+  proposeByRules,
+  renderMessage,
+  type CaseSnapshot,
+  type Diagnosis,
+  type Proposer,
+} from "@boomerang/cases";
+import {
+  CLASSIFY_MODEL,
+  costUsd,
+  DECISION_MODEL,
+  DRAFT_MODEL,
+  ModelCallError,
+  type ModelClient,
+  type ModelRequest,
+  type Usage,
+} from "./model";
 import { CLASSIFY_SYSTEM, DECIDE_SYSTEM, DRAFT_SYSTEM, PROMPT_VERSION } from "./prompts";
 import {
   ClassificationSchema,
@@ -31,7 +54,8 @@ const ZERO = { inputTokens: 0, outputTokens: 0, thinkingTokens: 0, costUsd: 0 };
 
 /** Which approved template a contact action uses. */
 export function templateFor(action: Action, diagnosis: Diagnosis): TemplateId | null {
-  if (action === "send_reminder") return diagnosis.cause === "broken_promise" ? "promise_follow_up" : "reminder";
+  if (action === "send_reminder")
+    return diagnosis.cause === "broken_promise" ? "promise_follow_up" : "reminder";
   if (action === "offer_payment_plan") return "payment_plan";
   if (action === "send_update_payment_message") return "update_payment_method";
   return null;
@@ -42,10 +66,21 @@ export function templateFor(action: Action, diagnosis: Diagnosis): TemplateId | 
  * from its lane's menu. An invalid reply is retried once with the validation errors; a second
  * invalid reply escalates the case to a person. Model, prompt version and input are recorded.
  */
-export async function decide(opts: AgentOptions, s: CaseSnapshot, diagnosis: Diagnosis, now: Date): Promise<Proposal> {
+export async function decide(
+  opts: AgentOptions,
+  s: CaseSnapshot,
+  diagnosis: Diagnosis,
+  now: Date,
+): Promise<Proposal> {
   const model = opts.decisionModel ?? DECISION_MODEL;
   const summary = buildCaseSummary(s, diagnosis, now);
-  const meta: ProposalMeta = { model, promptVersion: PROMPT_VERSION.decide, input: summary, attempts: 0, rejected: [] };
+  const meta: ProposalMeta = {
+    model,
+    promptVersion: PROMPT_VERSION.decide,
+    input: summary,
+    attempts: 0,
+    rejected: [],
+  };
   let usage = ZERO;
   let feedback = "";
 
@@ -104,7 +139,12 @@ export async function decide(opts: AgentOptions, s: CaseSnapshot, diagnosis: Dia
  * the lint issues; if the redraft also fails, the message is marked redrafted so the gate holds it
  * for a person (rule 11).
  */
-async function withDraft(opts: AgentOptions, proposal: Proposal, s: CaseSnapshot, diagnosis: Diagnosis): Promise<Proposal> {
+async function withDraft(
+  opts: AgentOptions,
+  proposal: Proposal,
+  s: CaseSnapshot,
+  diagnosis: Diagnosis,
+): Promise<Proposal> {
   const template = templateFor(proposal.action, diagnosis);
   if (!template) return proposal;
   const model = opts.draftModel ?? DRAFT_MODEL;
@@ -119,7 +159,9 @@ async function withDraft(opts: AgentOptions, proposal: Proposal, s: CaseSnapshot
       model,
       promptVersion: PROMPT_VERSION.draft,
       system: DRAFT_SYSTEM,
-      input: JSON.stringify({ tone, template, stage: s.contacts, situation: proposal.reason, lane: s.lane }) + feedback,
+      input:
+        JSON.stringify({ tone, template, stage: s.contacts, situation: proposal.reason, lane: s.lane }) +
+        feedback,
       jsonSchema: DRAFT_JSON_SCHEMA,
       reasoning: "low",
       caseId: s.id,
@@ -131,7 +173,21 @@ async function withDraft(opts: AgentOptions, proposal: Proposal, s: CaseSnapshot
       if (!(error instanceof ModelCallError)) throw error;
       // The note is optional: keep the agent's decision and send the approved template as it is.
       const message = renderMessage(template, s, tone);
-      return { ...proposal, message, meta: { ...proposal.meta, usage, draft: { model, promptVersion: PROMPT_VERSION.draft, personalNote: "", redrafted: false, lintIssues: [`drafting unavailable: ${error.message.slice(0, 120)}`] } } };
+      return {
+        ...proposal,
+        message,
+        meta: {
+          ...proposal.meta,
+          usage,
+          draft: {
+            model,
+            promptVersion: PROMPT_VERSION.draft,
+            personalNote: "",
+            redrafted: false,
+            lintIssues: [`drafting unavailable: ${error.message.slice(0, 120)}`],
+          },
+        },
+      };
     }
     usage = addUsage(usage, res.model, res.usage);
     let note = "";
@@ -145,14 +201,37 @@ async function withDraft(opts: AgentOptions, proposal: Proposal, s: CaseSnapshot
     const lint = lintMessage(message.body, facts);
     await opts.onValidated?.(req, lint.ok);
     if (lint.ok) {
-      return { ...proposal, message, meta: { ...proposal.meta, usage, draft: { model: res.model, promptVersion: PROMPT_VERSION.draft, personalNote: note, redrafted: attempt > 1 } } };
+      return {
+        ...proposal,
+        message,
+        meta: {
+          ...proposal.meta,
+          usage,
+          draft: {
+            model: res.model,
+            promptVersion: PROMPT_VERSION.draft,
+            personalNote: note,
+            redrafted: attempt > 1,
+          },
+        },
+      };
     }
     feedback = `\n\nYour note was rejected: ${lint.issues.join("; ")}. Write a note that avoids these problems, or return an empty string.`;
     if (attempt === 2) {
       return {
         ...proposal,
         message,
-        meta: { ...proposal.meta, usage, draft: { model: res.model, promptVersion: PROMPT_VERSION.draft, personalNote: note, redrafted: true, lintIssues: lint.issues } },
+        meta: {
+          ...proposal.meta,
+          usage,
+          draft: {
+            model: res.model,
+            promptVersion: PROMPT_VERSION.draft,
+            personalNote: note,
+            redrafted: true,
+            lintIssues: lint.issues,
+          },
+        },
       };
     }
   }
@@ -166,7 +245,8 @@ async function withDraft(opts: AgentOptions, proposal: Proposal, s: CaseSnapshot
  */
 export function agentProposer(opts: AgentOptions): Proposer {
   return async (s: CaseSnapshot, diagnosis: Diagnosis, now: Date) => {
-    if (["resolved", "dispute", "opted_out"].includes(diagnosis.cause)) return proposeByRules(s, diagnosis, now);
+    if (["resolved", "dispute", "opted_out"].includes(diagnosis.cause))
+      return proposeByRules(s, diagnosis, now);
     try {
       return await decide(opts, s, diagnosis, now);
     } catch (error) {
@@ -198,7 +278,12 @@ export function nextDays(now: Date, count: number): string[] {
  * labels. The reply text goes only here; the decision call only ever sees the resulting label.
  * A promise date is accepted only if it is a real date from today up to 60 days ahead.
  */
-export async function classifyReply(client: ModelClient, text: string, now: Date, options: { model?: string; caseId?: string | null } = {}): Promise<Classification> {
+export async function classifyReply(
+  client: ModelClient,
+  text: string,
+  now: Date,
+  options: { model?: string; caseId?: string | null } = {},
+): Promise<Classification> {
   const model = options.model ?? CLASSIFY_MODEL;
   const req: ModelRequest = {
     kind: "classify",
@@ -206,7 +291,11 @@ export async function classifyReply(client: ModelClient, text: string, now: Date
     promptVersion: PROMPT_VERSION.classify,
     system: CLASSIFY_SYSTEM,
     // The reply is fenced and labelled as data; the instructions live only in the system prompt.
-    input: JSON.stringify({ today: now.toISOString().slice(0, 10), calendar: nextDays(now, 14), reply: text.slice(0, 4000) }),
+    input: JSON.stringify({
+      today: now.toISOString().slice(0, 10),
+      calendar: nextDays(now, 14),
+      reply: text.slice(0, 4000),
+    }),
     jsonSchema: CLASSIFY_JSON_SCHEMA,
     reasoning: "low",
     caseId: options.caseId ?? null,
