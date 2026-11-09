@@ -8,10 +8,10 @@
 /** Operations Boomerang performs with direct REST calls because the toolkit has no tool for them. */
 export const REST_OPERATIONS = [
   "capture_subscription_balance",
-  // Sandbox test harness only (seeder profile): creates overdue invoices and outstanding balances,
-  // which the toolkit cannot (create_invoice has no due date; sandbox will not fail payments on demand).
+  // Sandbox test harness only (seeder profile): creates invoices with due dates, which the
+  // toolkit's create_invoice cannot. (PayPal's PATCH can only lower an outstanding balance, never
+  // create one, so balances come only from real failed payments or injected webhooks in Phase 3.)
   "create_invoice_with_terms",
-  "set_subscription_outstanding_balance",
 ] as const;
 export type RestOperation = (typeof REST_OPERATIONS)[number];
 
@@ -48,7 +48,6 @@ export const TOOL_WHITELIST = {
     "create_subscription",
     "show_subscription_details",
     "create_invoice_with_terms",
-    "set_subscription_outstanding_balance",
   ],
 } as const;
 

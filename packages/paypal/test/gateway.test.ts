@@ -152,7 +152,7 @@ describe("seeder profile", () => {
     });
     await expect(production.callTool("seeder", "create_invoice", {})).rejects.toThrow(/outside the sandbox/);
     await expect(
-      production.callRest("seeder", "set_subscription_outstanding_balance", { method: "PATCH", path: "/x" }),
+      production.callRest("seeder", "create_invoice_with_terms", { method: "POST", path: "/x" }),
     ).rejects.toThrow(/outside the sandbox/);
     expect(paypal.requests).toHaveLength(0);
   });

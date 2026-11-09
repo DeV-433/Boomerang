@@ -2,7 +2,7 @@
  * Live sandbox verification for BUILD_PLAN steps 2.8 and 2.9 (subscription lane).
  *   npx tsx scripts/sandbox-subscription.ts setup            create product, plan, subscription; prints approve link
  *   npx tsx scripts/sandbox-subscription.ts check <I-...>    2.8: status and failed-payment count
- *   npx tsx scripts/sandbox-subscription.ts capture <I-...>  2.9: give it a balance, then capture it
+ *   npx tsx scripts/sandbox-subscription.ts capture <I-...>  2.9: capture the outstanding balance, if any
  */
 import { createLogger, loadConfig, requireConfig } from "@boomerang/core";
 import { createDb } from "@boomerang/db";
@@ -64,26 +64,21 @@ try {
     const sub = await showSubscriptionDetails(gateway, subscriptionId);
     console.log("2.8", JSON.stringify(subscriptionRisk(sub)), `next_billing=${sub.billing_info?.next_billing_time ?? "-"}`);
   } else if (command === "capture" && subscriptionId) {
-    await gateway.callRest(
-      "seeder",
-      "set_subscription_outstanding_balance",
-      {
-        method: "PATCH",
-        path: `/v1/billing/subscriptions/${subscriptionId}`,
-        body: [{ op: "replace", path: "/billing_info/outstanding_balance", value: { currency_code: "USD", value: "9.99" } }],
-      },
-      { idempotencyKey: `${run}:set-balance` },
-    );
+    // Captures only a real balance. The sandbox cannot create one on demand (PATCH can only lower
+    // it), so on a healthy subscription this shows PayPal's ZERO_OUTSTANDING_BALANCE verdict instead.
     const before = subscriptionRisk(await showSubscriptionDetails(gateway, subscriptionId));
     console.log("before capture", JSON.stringify(before));
-    const capture = await captureSubscriptionBalance(
+    const amount = before.outstanding ?? { currencyCode: "USD", value: "0.01" };
+    const result = await captureSubscriptionBalance(
       gateway,
-      { subscriptionId, amount: { currencyCode: "USD", value: before.outstanding?.value ?? "9.99" }, note: "Boomerang balance capture check" },
+      { subscriptionId, amount, note: "Boomerang balance capture check" },
       `${run}:capture`,
+    ).then(
+      (r) => `captured: ${JSON.stringify(r.data)}`,
+      (e: { status?: number; body?: string }) => `PayPal refused: HTTP ${e.status} ${e.body}`,
     );
-    console.log("capture response", JSON.stringify(capture.data));
-    const after = subscriptionRisk(await showSubscriptionDetails(gateway, subscriptionId));
-    console.log("after capture ", JSON.stringify(after));
+    console.log(result);
+    console.log("after capture ", JSON.stringify(subscriptionRisk(await showSubscriptionDetails(gateway, subscriptionId))));
   } else {
     console.log("usage: setup | check <subscription-id> | capture <subscription-id>");
   }
