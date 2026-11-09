@@ -142,6 +142,22 @@ describe("subscription wrappers (2.8, 2.9)", () => {
   });
 });
 
+describe("seeder profile", () => {
+  it("is refused outside the sandbox, for toolkit and REST calls alike", async () => {
+    const { PayPalGateway } = await import("../src/gateway");
+    const { TokenManager } = await import("../src/auth");
+    const production = new PayPalGateway({
+      tokens: new TokenManager({ clientId: "id", clientSecret: "s", environment: "PRODUCTION" }),
+      idempotency: new MemoryIdempotencyStore(),
+    });
+    await expect(production.callTool("seeder", "create_invoice", {})).rejects.toThrow(/outside the sandbox/);
+    await expect(
+      production.callRest("seeder", "set_subscription_outstanding_balance", { method: "PATCH", path: "/x" }),
+    ).rejects.toThrow(/outside the sandbox/);
+    expect(paypal.requests).toHaveLength(0);
+  });
+});
+
 describe("error handling (2.11)", () => {
   // Done when: a simulated 429 retries then succeeds.
   it("backs off on 429, honouring Retry-After, then succeeds", async () => {

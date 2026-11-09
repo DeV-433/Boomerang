@@ -6,7 +6,13 @@
  */
 
 /** Operations Boomerang performs with direct REST calls because the toolkit has no tool for them. */
-export const REST_OPERATIONS = ["capture_subscription_balance"] as const;
+export const REST_OPERATIONS = [
+  "capture_subscription_balance",
+  // Sandbox test harness only (seeder profile): creates overdue invoices and outstanding balances,
+  // which the toolkit cannot (create_invoice has no due date; sandbox will not fail payments on demand).
+  "create_invoice_with_terms",
+  "set_subscription_outstanding_balance",
+] as const;
 export type RestOperation = (typeof REST_OPERATIONS)[number];
 
 const READ_ONLY_SHARED = ["get_order", "list_disputes", "get_dispute", "list_transactions"] as const;
@@ -41,6 +47,8 @@ export const TOOL_WHITELIST = {
     "create_subscription_plan",
     "create_subscription",
     "show_subscription_details",
+    "create_invoice_with_terms",
+    "set_subscription_outstanding_balance",
   ],
 } as const;
 

@@ -106,6 +106,7 @@ export class PayPalGateway {
     opts: CallOptions = {},
   ): Promise<CallResult<T>> {
     assertAllowed(profile, operation);
+    if (profile === "seeder" && !this.sandbox) throw new Error("The seeder profile is refused outside the sandbox");
     return this.idempotent(profile, operation, request, opts.idempotencyKey, (requestId) =>
       this.options.tokens.withToken(async (accessToken) => {
         const res = await this.fetchFn(`${this.options.tokens.baseUrl}${request.path}`, {
