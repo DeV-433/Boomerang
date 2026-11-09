@@ -315,7 +315,8 @@ export class RecordingClient implements ModelClient {
       const [hit] = await db
         .select()
         .from(modelCalls)
-        .where(and(eq(modelCalls.kind, req.kind), eq(modelCalls.inputHash, hash), sql`${modelCalls.error} is null`))
+        // Only answers from the requested model: a fallback model's answer is not reused as the primary's.
+        .where(and(eq(modelCalls.kind, req.kind), eq(modelCalls.inputHash, hash), eq(modelCalls.model, req.model), sql`${modelCalls.error} is null`))
         .orderBy(desc(modelCalls.createdAt))
         .limit(1);
       if (hit?.responseText) {

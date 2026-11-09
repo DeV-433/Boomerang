@@ -6,9 +6,9 @@
  * free and gives the same decisions.
  * An agent run stops at the first fallback to the rules (quota spent, provider down) so its result
  * is never a silent mix of agent and rule decisions; re-run later and the cache picks up where it
- * stopped. --allow-rules-fallback lets such a run finish and reports how many decisions fell back.
+ * stopped. The same applies to a decision from the fallback model. --allow-fallback lets such a run finish and reports how many decisions fell back.
  */
-import { agentProposer, GroqClient, RecordingClient, UsageMeter } from "@boomerang/agent";
+import { agentProposer, DECISION_MODEL, GroqClient, RecordingClient, UsageMeter } from "@boomerang/agent";
 import { proposeByRules } from "@boomerang/cases";
 import { loadConfig, requireConfig } from "@boomerang/core";
 import { createDb } from "@boomerang/db";
@@ -45,13 +45,16 @@ try {
       meter,
     });
     const agent = agentProposer({ client, onValidated: (req, ok) => client.markValid(req, ok) });
-    const allowFallback = process.argv.includes("--allow-rules-fallback");
+    const allowFallback = process.argv.includes("--allow-fallback");
     proposer = async (s, diagnosis, now) => {
       const p = await agent(s, diagnosis, now);
       const source = p.proposedBy === "rules (agent fallback)" ? "rules fallback" : p.proposedBy === "rules" ? "rules (clear-cut)" : String(p.meta?.model ?? p.proposedBy);
       proposalSources[source] = (proposalSources[source] ?? 0) + 1;
-      if (source === "rules fallback" && !allowFallback) {
+      if (!allowFallback && source === "rules fallback") {
         throw new Error(`agent fell back to the rules (${String(p.meta?.fallback).slice(0, 300)}). Stopped so the result is not a mix; re-run later and cached answers are reused.`);
+      }
+      if (!allowFallback && p.proposedBy.startsWith("agent:") && p.meta?.model !== DECISION_MODEL) {
+        throw new Error(`decision came from the fallback model ${String(p.meta?.model)}, not ${DECISION_MODEL} (usually its daily token limit). Stopped so the result is not a mix; re-run later and cached answers are reused.`);
       }
       return p;
     };
