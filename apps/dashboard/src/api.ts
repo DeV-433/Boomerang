@@ -69,3 +69,21 @@ export interface Health {
   status: string;
   db: string;
 }
+
+/** Downloads a file from the API with the operator token (a plain link cannot carry the header). */
+export async function download(path: string, fallbackName: string): Promise<void> {
+  const token = getToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new ApiError(res.status, `${res.status} ${res.statusText}`);
+  const name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

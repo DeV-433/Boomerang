@@ -9,7 +9,7 @@ import { AgGridReact } from "ag-grid-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { AuditEntry, AuditListResponse, AuditListRow, CaseAuditResponse } from "@boomerang/core";
-import { api } from "../api";
+import { api, download } from "../api";
 import { describeEntry } from "../auditText";
 import { setupGrid, useGridTheme } from "../grid";
 import { LiveBadge, useLiveGrid } from "../live";
@@ -155,6 +155,18 @@ export function Audit() {
               show all
             </button>
           </span>
+        )}
+        {caseFilter && (
+          <button
+            className="link-button"
+            onClick={() =>
+              download(`/api/cases/${caseFilter}/receipt.csv`, "boomerang-receipt.csv").catch((e: Error) =>
+                window.alert(`Could not download: ${e.message}`),
+              )
+            }
+          >
+            Download receipt (CSV)
+          </button>
         )}
       </div>
       <div className="toolbar">

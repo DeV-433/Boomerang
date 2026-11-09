@@ -7,7 +7,10 @@ import type {
   TrustAttackResponse,
   TrustSuiteResponse,
 } from "@boomerang/core";
-import type { DbHandle } from "@boomerang/db";
+import { randomUUID } from "node:crypto";
+import { asc, eq } from "drizzle-orm";
+import { setCasePaused } from "@boomerang/cases";
+import { auditLog, cases, customers, type DbHandle } from "@boomerang/db";
 import { hasTestDb, setupTestDb } from "@boomerang/db/testing";
 import { buildApp } from "../src/app";
 
@@ -115,5 +118,54 @@ describe.skipIf(!hasTestDb)("dashboard API: trust panel (7B.2, 7B.3, 7B.6)", () 
     ).toBe(404);
     expect((await app.inject({ method: "GET", url: "/api/audit/verify" })).statusCode).toBe(401);
     expect((await app.inject({ method: "POST", url: "/api/trust/tamper-demo" })).statusCode).toBe(401);
+  });
+
+  it("exports a per-case receipt whose hashes match the log (7B.8)", async () => {
+    const [cust] = await h.db
+      .insert(customers)
+      .values({ email: "receipt@example.com", simulated: true })
+      .returning();
+    const ref = `RCPT-${randomUUID()}`;
+    const [c] = await h.db
+      .insert(cases)
+      .values({
+        lane: "invoice",
+        paypalRef: ref,
+        customerId: cust!.id,
+        amountCents: 1_000,
+        currency: "USD",
+        state: "awaiting",
+        simulated: true,
+      })
+      .returning();
+    await setCasePaused(h.db, c!.id, true, "operator", '=HYPERLINK("http://evil")');
+    await setCasePaused(h.db, c!.id, false, "operator");
+
+    const res = await app.inject({ method: "GET", url: `/api/cases/${c!.id}/receipt.csv`, headers: auth });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toContain("text/csv");
+    expect(res.headers["content-disposition"]).toContain(`boomerang-receipt-${ref}.csv`);
+    const rows = res.body
+      .trim()
+      .split("\r\n")
+      .map((line) => [...line.matchAll(/"((?:[^"]|"")*)"/g)].map((m) => m[1]!.replace(/""/g, '"')));
+    expect(rows[0]).toEqual(["Boomerang audit receipt"]);
+    expect(rows.find((r) => r[0] === "reference")?.[1]).toBe(ref);
+    const header = rows.findIndex((r) => r[0] === "entry");
+    const entries = rows.slice(header + 1);
+    const log = await h.db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.caseId, c!.id))
+      .orderBy(asc(auditLog.id));
+    expect(entries.map((r) => [Number(r[0]), r[5], r[6]])).toEqual(
+      log.map((e) => [e.id, e.prevHash ?? "", e.hash]),
+    );
+    // No cell can start a spreadsheet formula, whatever the data holds.
+    expect(rows.flat().filter((cell) => /^[=+\-@]/.test(cell))).toEqual([]);
+    expect(
+      (await app.inject({ method: "GET", url: `/api/cases/${randomUUID()}/receipt.csv`, headers: auth }))
+        .statusCode,
+    ).toBe(404);
   });
 });
