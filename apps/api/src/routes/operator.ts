@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { AppDeps } from "../app";
+import { approvalRoutes } from "./approvals";
 import { auditRoutes } from "./audit";
 import { caseRoutes } from "./cases";
 import { summaryRoutes } from "./summary";
@@ -36,4 +37,5 @@ export async function operatorRoutes(
   await app.register(summaryRoutes, deps);
   await app.register(caseRoutes, deps);
   await app.register(auditRoutes, deps);
+  await app.register(approvalRoutes, deps);
 }

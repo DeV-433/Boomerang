@@ -179,3 +179,60 @@ export interface CaseAuditResponse {
   /** The case's whole trail, oldest first (chain order). */
   entries: AuditEntry[];
 }
+
+// 6.9 and 6.10: approvals ---------------------------------------------------------------------------
+
+export interface DraftMessage {
+  subject: string;
+  body: string;
+  tone: string;
+  template: string;
+  personalNote?: string;
+}
+
+export interface ApprovalRow {
+  approvalId: string;
+  actionId: string;
+  status: "pending" | "approved" | "edited" | "rejected";
+  createdAt: string;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  note: string | null;
+  case: {
+    id: string;
+    paypalRef: string;
+    lane: "invoice" | "subscription";
+    customer: string | null;
+    amountCents: number;
+    currency: string;
+    stage: number;
+    state: string;
+  };
+  action: string;
+  proposedBy: string;
+  /** The proposer's own reason (rules or model). */
+  reason: string | null;
+  confidence: number | null;
+  message: DraftMessage | null;
+  /** Why the gate held it for a person. */
+  gate: { verdict: string | null; reasons: string[] };
+  /** The customer's latest reply, verbatim and untrusted: shown apart from the agent's reasoning. */
+  customerReply: { text: string; receivedAt: string; label: string | null } | null;
+}
+
+export interface ApprovalsResponse {
+  rows: ApprovalRow[];
+}
+
+export interface ApprovalDecisionRequest {
+  decision: "approve" | "edit" | "reject";
+  note?: string;
+  /** For "edit": the operator's new subject and body. The body must still pass the message lint. */
+  message?: { subject?: string; body: string };
+}
+
+export interface ApprovalDecisionResponse {
+  /** What happened next: sent (executed), held for later (deferred), closed, or nothing pending (skipped). */
+  outcome: string;
+  detail: string | null;
+}

@@ -17,7 +17,7 @@ logger.info(
   },
   "PayPal Agent Toolkit loaded",
 );
-const { verifier } = createPayPal(config, { db: db.db, logger });
+const { verifier, gateway } = createPayPal(config, { db: db.db, logger });
 if (!config.PAYPAL_WEBHOOK_ID) {
   logger.warn("PAYPAL_WEBHOOK_ID is not set: every incoming webhook will be rejected until it is");
 }
@@ -39,6 +39,7 @@ const app = await buildApp({
   corsOrigins,
   operatorToken: config.OPERATOR_TOKEN,
   policyMode: config.POLICY_MODE,
+  gateway,
 });
 
 const shutdown = async (signal: string) => {

@@ -1,8 +1,9 @@
 import { eq } from "drizzle-orm";
-import { cases, type Database } from "@boomerang/db";
+import { actions, cases, type Database } from "@boomerang/db";
 import { auditedTransaction, writeAudit } from "@boomerang/audit";
-import { isEndState } from "@boomerang/core";
-import { closeCase, lockCase, scheduleCheck } from "./store";
+import { isEndState, lintMessage } from "@boomerang/core";
+import { messageFacts } from "./messages";
+import { closeCase, loadSnapshot, lockCase, scheduleCheck } from "./store";
 
 export type OperatorResult =
   { ok: true; caseId: string; detail: string } | { ok: false; status: 404 | 409; error: string };
@@ -47,4 +48,23 @@ export async function escalateCase(
     await closeCase(tx, caseId, "escalated", note ? `escalated by ${by}: ${note}` : `escalated by ${by}`, by);
     return { ok: true, caseId, detail: "escalated" };
   });
+}
+
+/**
+ * Step 6.9: an operator's edited draft must pass the same lint as any other message (amount,
+ * reference, payment link, opt-out line, no invented amounts or links) before it can be approved.
+ */
+export async function lintEditedMessage(
+  db: Database,
+  actionId: string,
+  body: string,
+): Promise<
+  { ok: true } | { ok: false; status: 404; error: string } | { ok: false; status: 422; issues: string[] }
+> {
+  const [row] = await db.select({ caseId: actions.caseId }).from(actions).where(eq(actions.id, actionId));
+  if (!row) return { ok: false, status: 404, error: "action not found" };
+  const snapshot = await loadSnapshot(db, row.caseId, new Date());
+  if (!snapshot) return { ok: false, status: 404, error: "case not found" };
+  const lint = lintMessage(body, messageFacts(snapshot));
+  return lint.ok ? { ok: true } : { ok: false, status: 422, issues: lint.issues };
 }
