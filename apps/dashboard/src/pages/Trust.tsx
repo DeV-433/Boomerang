@@ -22,6 +22,16 @@ const CHECK_LABELS: Record<string, string> = {
 };
 const human = (s: string) => s.replace(/_/g, " ");
 
+/** What actually happened to the case, in words (the gate "allows" a hand-off, which reads oddly on its own). */
+function outcome(r: AttackRunResult): string {
+  if (r.proposal.action === "escalate_to_human") return "handed to a person, no contact";
+  if (r.proposal.action === "stop") return "stopped, no contact";
+  if (r.gate.verdict === "hold") return `held for a person (rule ${r.gate.decidedBy})`;
+  if (r.gate.verdict === "block") return `blocked (rule ${r.gate.decidedBy})`;
+  if (r.wouldCall === "send_invoice_reminder") return "ordinary reminder only";
+  return human(r.proposal.action);
+}
+
 type BadgeState = { kind: "real"; v: AuditVerifyResponse } | { kind: "demo"; r: TamperDemoResponse };
 
 function IntegrityBadge({ state }: { state: BadgeState | null }) {
@@ -227,8 +237,7 @@ export function Trust() {
               <tr>
                 <th scope="col">Attack</th>
                 <th scope="col">Kind</th>
-                <th scope="col">Ended as</th>
-                <th scope="col">Gate</th>
+                <th scope="col">Outcome</th>
                 <th scope="col">Result</th>
                 <th scope="col" />
               </tr>
@@ -238,8 +247,7 @@ export function Trust() {
                 <tr key={r.attack.id}>
                   <th scope="row">{r.attack.name}</th>
                   <td>{human(r.attack.category)}</td>
-                  <td>{human(r.proposal.action)}</td>
-                  <td>{r.gate.verdict}</td>
+                  <td>{outcome(r)}</td>
                   <td className={r.passed ? "ok" : "bad"}>{r.passed ? "✓ contained" : "✗ failed"}</td>
                   <td>
                     <button
