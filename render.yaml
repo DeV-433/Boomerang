@@ -47,10 +47,11 @@ services:
         sync: false
       - key: PAYPAL_SANDBOX_MERCHANT_EMAIL
         sync: false
-      - key: GEMINI_API_KEY
+      - key: GROQ_API_KEY
         sync: false
-      - key: GEMINI_RPM
-        value: "10"
+      # Optional client-side cap per model; Groq's rate-limit headers pace calls either way.
+      - key: GROQ_RPM
+        value: "25"
       - key: PAY_LINK_SECRET
         sync: false
       - key: SIM_WEBHOOK_SECRET
@@ -84,10 +85,11 @@ services:
         sync: false
       - key: PAYPAL_CLIENT_SECRET
         sync: false
-      - key: GEMINI_API_KEY
+      - key: GROQ_API_KEY
         sync: false
-      - key: GEMINI_RPM
-        value: "10"
+      # Optional client-side cap per model; Groq's rate-limit headers pace calls either way.
+      - key: GROQ_RPM
+        value: "25"
 
   # Operator dashboard (placeholder until step 6.1).
   - type: web

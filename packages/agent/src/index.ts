@@ -1,6 +1,8 @@
 export { decide, agentProposer, classifyReply, templateFor, type AgentOptions, type Classification } from "./agent";
 export {
-  GeminiClient,
+  GroqClient,
+  parseDuration,
+  GROQ_URL,
   RecordingClient,
   UsageMeter,
   ModelCallError,

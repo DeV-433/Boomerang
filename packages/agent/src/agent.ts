@@ -57,7 +57,7 @@ export async function decide(opts: AgentOptions, s: CaseSnapshot, diagnosis: Dia
       system: DECIDE_SYSTEM,
       input: JSON.stringify({ today: now.toISOString().slice(0, 10), case: summary }) + feedback,
       jsonSchema: decisionJsonSchema(s.lane),
-      thinking: "MINIMAL",
+      reasoning: "low",
       caseId: s.id,
     };
     const res = await opts.client.generate(req);
@@ -121,7 +121,7 @@ async function withDraft(opts: AgentOptions, proposal: Proposal, s: CaseSnapshot
       system: DRAFT_SYSTEM,
       input: JSON.stringify({ tone, template, stage: s.contacts, situation: proposal.reason, lane: s.lane }) + feedback,
       jsonSchema: DRAFT_JSON_SCHEMA,
-      thinking: "MINIMAL",
+      reasoning: "low",
       caseId: s.id,
     };
     let res: Awaited<ReturnType<ModelClient["generate"]>>;
@@ -199,7 +199,7 @@ export async function classifyReply(client: ModelClient, text: string, now: Date
     // The reply is fenced and labelled as data; the instructions live only in the system prompt.
     input: JSON.stringify({ today: now.toISOString().slice(0, 10), reply: text.slice(0, 4000) }),
     jsonSchema: CLASSIFY_JSON_SCHEMA,
-    thinking: "MINIMAL",
+    reasoning: "low",
     caseId: options.caseId ?? null,
   };
   const res = await client.generate(req);

@@ -1,4 +1,4 @@
-import { agentProposer, classifyPendingReplies, GeminiClient, RecordingClient } from "@boomerang/agent";
+import { agentProposer, classifyPendingReplies, GroqClient, RecordingClient } from "@boomerang/agent";
 import { pollInvoices, processPendingEvents, runDueJobs, type LoopDeps } from "@boomerang/cases";
 import { createLogger, loadConfig, requireConfig } from "@boomerang/core";
 import { createDb, pingDb } from "@boomerang/db";
@@ -21,9 +21,9 @@ const paypal = createPayPal(config, { db: db.db, logger });
 const TICK_MS = Number(process.env.WORKER_TICK_MS ?? 5_000);
 const POLL_MS = Number(process.env.INVOICE_POLL_MS ?? 5 * 60_000);
 
-// 5.10: with a Gemini key the agent proposes (rules are the fallback); without one, the rules do.
-const model = config.GEMINI_API_KEY
-  ? new RecordingClient(new GeminiClient(config.GEMINI_API_KEY, { rpm: config.GEMINI_RPM }), { db: db.db, runTag: "worker" })
+// 5.10: with a Groq key the agent proposes (rules are the fallback); without one, the rules do.
+const model = config.GROQ_API_KEY
+  ? new RecordingClient(new GroqClient(config.GROQ_API_KEY, { rpm: config.GROQ_RPM }), { db: db.db, runTag: "worker" })
   : null;
 const deps: LoopDeps = {
   db: db.db,

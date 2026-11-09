@@ -118,8 +118,8 @@ describe("decision call (5.3 to 5.5) and drafting (5.7)", () => {
     const { client } = scripted({ decide: [decision()], draft: [note("If you have already paid, thank you, and please ignore this.")] });
     const s = snap();
     const p = await decide({ client }, s, diagnose(s, NOW), NOW);
-    expect(p).toMatchObject({ action: "send_reminder", proposedBy: "agent:gemini-3.6-flash", confidence: 0.85, cause: "overdue_no_engagement" });
-    expect(p.meta).toMatchObject({ model: "gemini-3.6-flash", promptVersion: "decide-v1", attempts: 1 });
+    expect(p).toMatchObject({ action: "send_reminder", proposedBy: "agent:openai/gpt-oss-120b", confidence: 0.85, cause: "overdue_no_engagement" });
+    expect(p.meta).toMatchObject({ model: "openai/gpt-oss-120b", promptVersion: "decide-v1", attempts: 1 });
     expect(p.meta?.input).toMatchObject({ case_id: s.id, lane: "invoice", stage: 0 });
     expect(p.meta?.usage?.costUsd).toBeGreaterThan(0);
   });
@@ -175,7 +175,7 @@ describe("decision call (5.3 to 5.5) and drafting (5.7)", () => {
     const { client } = scripted({ decide: [decision()], draft: [new ModelCallError("rate limited", true, 10_000)] });
     const s = snap();
     const p = await agentProposer({ client })(s, diagnose(s, NOW), NOW);
-    expect(p).toMatchObject({ action: "send_reminder", proposedBy: "agent:gemini-3.6-flash" });
+    expect(p).toMatchObject({ action: "send_reminder", proposedBy: "agent:openai/gpt-oss-120b" });
     expect(p.message?.body).toContain(OPT_OUT_LINE);
     expect(p.meta?.draft?.personalNote).toBe("");
   });
@@ -253,8 +253,8 @@ describe.skipIf(!hasTestDb)("agent inside the real loop and gate", () => {
     const [proposed] = await h.db.select().from(auditLog).where(eq(auditLog.caseId, c.id)).orderBy(asc(auditLog.id));
     const trail = await h.db.select().from(auditLog).where(eq(auditLog.caseId, c.id)).orderBy(asc(auditLog.id));
     const entry = trail.find((e) => e.kind === "proposed")!;
-    expect(entry.actor).toBe("agent:gemini-3.6-flash");
-    expect(entry.data).toMatchObject({ model: "gemini-3.6-flash", promptVersion: "decide-v1", inputSnapshot: { case_id: c.id, lane: "invoice", stage: 0 } });
+    expect(entry.actor).toBe("agent:openai/gpt-oss-120b");
+    expect(entry.data).toMatchObject({ model: "openai/gpt-oss-120b", promptVersion: "decide-v1", inputSnapshot: { case_id: c.id, lane: "invoice", stage: 0 } });
     expect(proposed).toBeDefined();
   });
 

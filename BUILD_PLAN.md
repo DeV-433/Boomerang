@@ -2,7 +2,7 @@
 
 One fragment at a time. Every step is small enough to build, test and commit on its own, and each has a **Done when** check so you know it is finished before moving on.
 
-**Stack:** TypeScript, Node + Fastify, Postgres (Drizzle), Vitest, React + Vite, AG Grid, Bryntum Scheduler, Gemini API (in place of the Claude API originally planned), PayPal sandbox + Agent Toolkit, Render.
+**Stack:** TypeScript, Node + Fastify, Postgres (Drizzle), Vitest, React + Vite, AG Grid, Bryntum Scheduler, Groq API with OpenAI's gpt-oss models (in place of the Claude API originally planned; Gemini was tried first), PayPal sandbox + Agent Toolkit, Render.
 
 **Legend:** `[M]` must-have · `[S]` should-have · `[C]` could-have · `★` standout feature (what-if replay, trust panel, self-serve page)
 
@@ -10,14 +10,15 @@ One fragment at a time. Every step is small enough to build, test and commit on 
 
 ## Current status (read this first)
 
-Last updated 2026-11-09. Phases 0 to 4 are done (checkpoints **CP1**, **CP2** and **CP3** reached); next up is **Phase 5** (agent).
+Last updated 2026-11-09. Phases 0 to 4 are done (checkpoints **CP1**, **CP2** and **CP3** reached). **Phase 5** (agent) is built and unit-tested; the live evaluations (5.3, 5.9) and the agent simulation (5.10, 5.11) must be re-run on Groq.
 Ticked boxes below were checked against their *Done when*; an unticked box with a note in _italics_ is partly done.
 
 Decisions that differ from the text of this plan:
 
 | Topic | What we actually do |
 | --- | --- |
-| Model | Gemini (`GEMINI_API_KEY`, package `@google/genai`), imported only by `packages/agent`. Read "Claude" in later steps as "the model". |
+| Model | Groq (`GROQ_API_KEY`), called with plain `fetch` from `packages/agent` only. Decisions: `openai/gpt-oss-120b`; drafting, reply classification and fallback: `openai/gpt-oss-20b` (the only production Groq models with strict JSON-schema output). Read "Claude" in later steps as "the model". Gemini was used first and dropped on 2026-11-09: `gemini-3.8-flash` was overloaded and the key's per-minute quota stalled a simulation at ~3 calls/min. |
+| Model limits | Groq's published Developer limits are per model: 30 req/min, 8K tokens/min, 1K req/day, 200K tokens/day. A full agent simulation of `demo-1` needs ~430 decisions (~500K tokens), so it may span more than a day's allowance; re-runs are free from the `model_calls` cache. |
 | Scope | No cut line: every phase is in scope. |
 | CI (1.2) | GitHub Actions cannot run on this account. `.githooks/pre-push` runs lint, type-check, migrations and all tests and blocks the push on failure. `npm install` enables it. Start Postgres first (`npm run db:up`). |
 | Deploys | Render deploys every push to `main` (`autoDeployTrigger: commit`), so the pre-push hook is the only gate. |
@@ -165,18 +166,18 @@ No cut line: every phase is in scope (decided 2026-11-09, step 0.7).
 
 ## Phase 5: Agent (to CP4)
 
-- [ ] **5.1 [M]** Define the proposal JSON schema and validator. *Done when:* invalid examples are rejected.
-- [ ] **5.2 [M]** Case-summary builder: structured fields only, no raw customer text, minimal personal data. *Done when:* a test shows no free-text field reaches the prompt.
-- [ ] **5.3 [M]** Decision call: Claude returns a proposal from the lane's action menu. *Done when:* output validates on 20 sample cases.
-- [ ] **5.4 [M]** Retry once on invalid output, then escalate to a human. *Done when:* a forced bad response ends in escalation.
-- [ ] **5.5 [M]** Store model name, prompt version and input snapshot with every decision. *Done when:* the audit entry for a proposal contains all three.
-- [ ] **5.6 [M]** Message templates per action and stage (friendly, neutral, firm). *Done when:* each template renders with all required fields.
-- [ ] **5.7 [M]** Drafting call: personalize inside a template. *Done when:* output keeps amount, reference, link and opt-out line.
-- [ ] **5.8 [M]** Message lint: reject invented facts, missing fields, threats, unapproved deadlines. *Done when:* a set of 15 bad drafts is all rejected and 10 good drafts all pass.
-- [ ] **5.9 [M]** Reply classifier in a separate call with **no tools** and a fixed output set (promise, dispute, opt-out, question, other). *Done when:* labels match on a test set of 30 replies.
-- [ ] **5.10 [M]** Connect the agent to the loop in place of the rule-based proposer; keep the rule-based one as fallback. *Done when:* the treatment arm runs on the agent.
-- [ ] **5.11 [M]** Token and cost tracking per run. *Done when:* the run report shows tokens and cost per recovered dollar.
-- [ ] **5.12 [M]** Safety tests: attempt to make the agent propose a non-menu action, a refund, or a policy change. *Done when:* the gate or validator blocks every attempt. **CP4.**
+- [x] **5.1 [M]** Define the proposal JSON schema and validator. *Done when:* invalid examples are rejected.
+- [x] **5.2 [M]** Case-summary builder: structured fields only, no raw customer text, minimal personal data. *Done when:* a test shows no free-text field reaches the prompt.
+- [ ] **5.3 [M]** Decision call: Claude returns a proposal from the lane's action menu. *Done when:* output validates on 20 sample cases. _(Passed 20/20 on Gemini before the switch; re-run on Groq: `npx tsx packages/agent/evals/decide.ts`.)_
+- [x] **5.4 [M]** Retry once on invalid output, then escalate to a human. *Done when:* a forced bad response ends in escalation.
+- [x] **5.5 [M]** Store model name, prompt version and input snapshot with every decision. *Done when:* the audit entry for a proposal contains all three.
+- [x] **5.6 [M]** Message templates per action and stage (friendly, neutral, firm). *Done when:* each template renders with all required fields.
+- [x] **5.7 [M]** Drafting call: personalize inside a template. *Done when:* output keeps amount, reference, link and opt-out line.
+- [x] **5.8 [M]** Message lint: reject invented facts, missing fields, threats, unapproved deadlines. *Done when:* a set of 15 bad drafts is all rejected and 10 good drafts all pass.
+- [ ] **5.9 [M]** Reply classifier in a separate call with **no tools** and a fixed output set (promise, dispute, opt-out, question, other). *Done when:* labels match on a test set of 30 replies. _(Passed 30/30 on Gemini with prompt classify-v2; re-run on Groq: `npx tsx packages/agent/evals/classify.ts`.)_
+- [ ] **5.10 [M]** Connect the agent to the loop in place of the rule-based proposer; keep the rule-based one as fallback. *Done when:* the treatment arm runs on the agent. _(Wired into the worker and simulator; agent run of the treatment arm pending: `npm run sim:treatment -- --proposer agent`.)_
+- [ ] **5.11 [M]** Token and cost tracking per run. *Done when:* the run report shows tokens and cost per recovered dollar. _(Built: `model_calls` ledger and the run report; pending the agent run.)_
+- [x] **5.12 [M]** Safety tests: attempt to make the agent propose a non-menu action, a refund, or a policy change. *Done when:* the gate or validator blocks every attempt. **CP4.**
 
 ---
 

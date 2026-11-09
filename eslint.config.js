@@ -3,7 +3,7 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 const PAYPAL = { group: ["@paypal/*"], message: "Only packages/paypal may import the PayPal toolkit." };
-const MODEL = { group: ["@google/genai", "@google/*"], message: "Only packages/agent may import the model SDK." };
+const MODEL = { group: ["@google/genai", "@google/*", "groq-sdk", "openai", "@anthropic-ai/*"], message: "Only packages/agent may talk to the model provider." };
 const BOUNDARY = {
   group: ["@boomerang/agent", "@boomerang/paypal"],
   message: "The policy gate and audit writer must never reach the model or PayPal.",

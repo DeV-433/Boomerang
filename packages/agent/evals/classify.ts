@@ -7,7 +7,7 @@
 import { loadConfig, requireConfig } from "@boomerang/core";
 import { createDb } from "@boomerang/db";
 import { classifyReply } from "../src/agent";
-import { GeminiClient, RecordingClient, UsageMeter } from "../src/model";
+import { GroqClient, RecordingClient, UsageMeter } from "../src/model";
 import type { ReplyLabel } from "../src/schema";
 
 // Today is Tuesday 2026-11-10.
@@ -50,7 +50,7 @@ const SET: [string, ReplyLabel, string | null][] = [
 const config = loadConfig();
 const db = createDb(requireConfig(config, "DATABASE_URL"));
 const meter = new UsageMeter();
-const client = new RecordingClient(new GeminiClient(requireConfig(config, "GEMINI_API_KEY"), { rpm: config.GEMINI_RPM ?? 10 }), { db: db.db, runTag: "eval-classify", meter, cache: true });
+const client = new RecordingClient(new GroqClient(requireConfig(config, "GROQ_API_KEY"), { rpm: config.GROQ_RPM }), { db: db.db, runTag: "eval-classify", meter, cache: true });
 
 let labels = 0;
 let dates = 0;

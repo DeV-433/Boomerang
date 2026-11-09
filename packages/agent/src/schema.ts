@@ -3,7 +3,7 @@ import { ACTION_MENUS, ALL_CAUSES, type Lane } from "@boomerang/core";
 
 /**
  * Step 5.1: the decision the model must return (section 6, structured output). Validated twice:
- * Gemini is given the JSON schema, and the reply is checked again here, because a provider-side
+ * the model is held to the JSON schema by Groq's strict mode, and the reply is checked again here, because a provider-side
  * schema is a convenience, not a guarantee.
  */
 export const DecisionSchema = z
@@ -40,7 +40,7 @@ export function validateDecision(raw: string, expected: { caseId: string; lane: 
   return errors.length ? { ok: false, errors } : { ok: true, decision: d };
 }
 
-/** JSON schema given to Gemini, with the action limited to the case's own lane menu. */
+/** JSON schema given to the model (Groq strict mode), with the action limited to the case's own lane menu. */
 export function decisionJsonSchema(lane: Lane): Record<string, unknown> {
   return {
     type: "object",
@@ -49,8 +49,9 @@ export function decisionJsonSchema(lane: Lane): Record<string, unknown> {
       cause: { type: "string", enum: [...ALL_CAUSES] },
       action: { type: "string", enum: [...ACTION_MENUS[lane]] },
       reason: { type: "string", description: "One or two sentences on why this action fits this case now." },
-      confidence: { type: "number", minimum: 0, maximum: 1 },
-      next_check_after_hours: { type: "integer", minimum: 1, maximum: 720 },
+      // Ranges (0..1, 1..720) are checked by DecisionSchema; Groq strict mode documents only types and enums.
+      confidence: { type: "number" },
+      next_check_after_hours: { type: "integer" },
     },
     required: ["case_id", "cause", "action", "reason", "confidence", "next_check_after_hours"],
     additionalProperties: false,

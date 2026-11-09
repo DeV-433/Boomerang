@@ -1,13 +1,14 @@
 import { createHash } from "node:crypto";
-import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { modelCalls, type Database } from "@boomerang/db";
 
 /**
- * The only module that talks to the model provider (Gemini). Lint rule: only packages/agent may
- * import @google/genai, and the policy gate and audit writer may not import this package at all.
+ * The only module that talks to the model provider (Groq). Lint rules keep provider SDKs and the
+ * Groq endpoint inside packages/agent, and the policy gate and audit writer may not import this
+ * package at all.
  *
- * No call ever passes tools. The model returns JSON that code validates; it cannot act.
+ * No call ever passes tools. The model returns schema-constrained JSON that code validates again;
+ * it cannot act.
  */
 
 export type CallKind = "decide" | "draft" | "classify";
@@ -18,15 +19,17 @@ export interface ModelRequest {
   promptVersion: string;
   system: string;
   input: string;
-  /** JSON schema the response must follow (Gemini structured output). */
+  /** JSON schema the response must follow (Groq strict structured outputs). */
   jsonSchema: Record<string, unknown>;
-  thinking: "MINIMAL" | "LOW";
+  /** Reasoning effort for reasoning models (gpt-oss). */
+  reasoning: "low" | "medium";
   caseId?: string | null;
 }
 
 export interface Usage {
   inputTokens: number;
   outputTokens: number;
+  /** Reasoning tokens, billed as output. */
   thinkingTokens: number;
 }
 
@@ -45,27 +48,27 @@ export interface ModelClient {
 }
 
 /**
- * USD per 1M tokens, Standard paid tier, from https://aistudio.google.com/docs/pricing (read
- * 2026-11-09). Thinking tokens are billed as output. Gemini 3.8 Flash doubles on 2027-01-01.
+ * USD per 1M tokens, from Groq's model pages (console.groq.com/docs/model/..., read 2026-11-09).
+ * Reasoning tokens count as output.
  */
-export const PRICES: Record<string, { input: number; output: number; note?: string }> = {
-  "gemini-3.8-flash": { input: 0.75, output: 3.75, note: "until 2026-12-31; $1.50 / $7.50 from 2027-01-01" },
-  "gemini-3.6-flash": { input: 0.75, output: 3.75, note: "until 2026-12-31; $1.50 / $7.50 from 2027-01-01" },
-  "gemini-3.5-flash-lite": { input: 0.3, output: 2.5 },
+export const PRICES: Record<string, { input: number; output: number }> = {
+  "openai/gpt-oss-120b": { input: 0.15, output: 0.6 },
+  "openai/gpt-oss-20b": { input: 0.075, output: 0.3 },
 };
 
 /**
- * Model choice, measured 2026-11-09: gemini-3.8-flash was overloaded (503 "high demand", or no
- * answer in 45 s) and rejects thinking level MINIMAL; gemini-3.6-flash answered a decision in
- * about 1.8 s and gemini-3.5-flash-lite in about 0.9 s. Each call falls back to FALLBACK_MODEL
- * when its primary is unavailable or slow.
+ * Model choice (2026-11-09): of Groq's production models, only gpt-oss-120b and gpt-oss-20b
+ * support strict JSON-schema outputs (constrained decoding). The larger model makes the decision;
+ * the faster, cheaper one drafts the personal note and classifies replies, which also spreads load
+ * across two per-model rate limits. Each call falls back to FALLBACK_MODEL if its primary fails.
  */
-export const DECISION_MODEL = "gemini-3.6-flash";
-export const DRAFT_MODEL = "gemini-3.5-flash-lite";
-export const CLASSIFY_MODEL = "gemini-3.5-flash-lite";
-export const FALLBACK_MODEL = "gemini-3.5-flash-lite";
+export const DECISION_MODEL = "openai/gpt-oss-120b";
+export const DRAFT_MODEL = "openai/gpt-oss-20b";
+export const CLASSIFY_MODEL = "openai/gpt-oss-20b";
+export const FALLBACK_MODEL = "openai/gpt-oss-20b";
 /** A call that has not answered by now is abandoned and retried (or sent to the fallback model). */
-export const CALL_TIMEOUT_MS = 20_000;
+export const CALL_TIMEOUT_MS = 30_000;
+export const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 export function costUsd(model: string, usage: Usage): number {
   const p = PRICES[model];
@@ -85,63 +88,99 @@ export class ModelCallError extends Error {
   }
 }
 
+/** Parses Groq's durations such as "7.66s", "1m2.5s", "120ms" or a plain number of seconds into milliseconds. */
+export function parseDuration(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds)) return Math.ceil(seconds * 1000);
+  let ms = 0;
+  let matched = false;
+  for (const [, n, unit] of value.matchAll(/(\d+(?:\.\d+)?)(ms|h|m|s)/g)) {
+    matched = true;
+    ms += Number(n) * (unit === "h" ? 3_600_000 : unit === "m" ? 60_000 : unit === "s" ? 1000 : 1);
+  }
+  return matched ? Math.ceil(ms) : null;
+}
+
+/** Latest rate-limit state Groq reported for a model (x-ratelimit-* headers). */
+export interface LimitState {
+  limitTokensPerMinute: number | null;
+  remainingTokens: number | null;
+  resetTokensMs: number | null;
+  limitRequestsPerDay: number | null;
+  remainingRequestsToday: number | null;
+  seenAt: number;
+}
+
+export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
 /**
- * Gemini through @google/genai. Each call has a hard timeout. Overload (429, 503), server errors
- * and timeouts are retried once on the requested model, then sent to the fallback model.
+ * Groq's OpenAI-compatible chat completions API, called with fetch. Each call has a hard timeout.
+ * Rate limits (429) wait for Groq's retry-after; overload, server errors and timeouts are retried
+ * once, then sent to the fallback model. Calls are also paced to stay under the per-minute token
+ * budget Groq reports in its headers, and under GROQ_RPM if set.
  */
-export class GeminiClient implements ModelClient {
-  private readonly ai: GoogleGenAI;
+export class GroqClient implements ModelClient {
+  /** Per model, the latest limits Groq reported. Exposed so evals can print the account's real limits. */
+  readonly limits = new Map<string, LimitState>();
+  private readonly nextSlot = new Map<string, number>();
+
   constructor(
-    apiKey: string,
+    private readonly apiKey: string,
     private readonly options: {
       fallbackModel?: string | null;
       timeoutMs?: number;
       attemptsPerModel?: number;
-      /** Requests per minute allowed per model; calls queue to stay under it (GEMINI_RPM). */
+      /** Requests per minute allowed per model; calls queue to stay under it (GROQ_RPM). */
       rpm?: number;
+      fetchFn?: FetchLike;
       sleep?: (ms: number) => Promise<void>;
     } = {},
-  ) {
-    this.ai = new GoogleGenAI({ apiKey });
+  ) {}
+
+  private sleep(ms: number): Promise<void> {
+    return (this.options.sleep ?? ((t: number) => new Promise((r) => setTimeout(r, t))))(ms);
   }
 
-  /** Per-model time of the next free request slot, for client-side rate limiting. */
-  private readonly nextSlot = new Map<string, number>();
-
-  private async throttle(model: string): Promise<void> {
+  /** Waits for the next request slot (GROQ_RPM) and for token budget (x-ratelimit-remaining-tokens). */
+  private async pace(model: string, estimatedTokens: number): Promise<void> {
     const rpm = this.options.rpm;
-    if (!rpm) return;
-    const gap = 60_000 / rpm;
-    const now = Date.now();
-    const slot = Math.max(now, this.nextSlot.get(model) ?? 0);
-    this.nextSlot.set(model, slot + gap);
-    if (slot > now) await (this.options.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms))))(slot - now);
+    if (rpm) {
+      const now = Date.now();
+      const slot = Math.max(now, this.nextSlot.get(model) ?? 0);
+      this.nextSlot.set(model, slot + 60_000 / rpm);
+      if (slot > now) await this.sleep(slot - now);
+    }
+    const state = this.limits.get(model);
+    if (state && state.remainingTokens !== null && state.resetTokensMs !== null && state.remainingTokens < estimatedTokens) {
+      const wait = state.seenAt + state.resetTokensMs - Date.now();
+      if (wait > 0) await this.sleep(Math.min(wait, 60_000) + 100);
+    }
   }
 
   async generate(req: ModelRequest): Promise<ModelResponse> {
     const fallback = this.options.fallbackModel === undefined ? FALLBACK_MODEL : this.options.fallbackModel;
     const models = [req.model, ...(fallback && fallback !== req.model ? [fallback] : [])];
     const attemptsPerModel = this.options.attemptsPerModel ?? 2;
-    const sleep = this.options.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+    const estimate = Math.ceil((req.system.length + req.input.length) / 3.5) + 600;
     let lastError: ModelCallError | null = null;
     for (const model of models) {
       let rateLimitWaits = 0;
       for (let attempt = 1; attempt <= attemptsPerModel; attempt++) {
         try {
-          await this.throttle(model);
+          await this.pace(model, estimate);
           return await this.once(model, req);
         } catch (error) {
           lastError = error instanceof ModelCallError ? error : new ModelCallError(String(error), true);
           if (!lastError.retryable) throw lastError;
-          // A per-minute rate limit says when to come back: wait that long (up to 3 times, 60 s each)
-          // and try the same model again without using up an attempt.
-          if (lastError.retryAfterMs !== null && rateLimitWaits < 3) {
+          // A per-minute limit says when to come back: wait (up to 3 times, 60 s each) on the same model.
+          if (lastError.retryAfterMs !== null && rateLimitWaits < 3 && lastError.retryAfterMs <= 60_000) {
             rateLimitWaits++;
             attempt--;
-            await sleep(Math.min(60_000, lastError.retryAfterMs) + 250);
+            await this.sleep(lastError.retryAfterMs + 250);
             continue;
           }
-          if (attempt < attemptsPerModel) await sleep(800 * attempt + Math.floor(Math.random() * 200));
+          if (attempt < attemptsPerModel) await this.sleep(800 * attempt + Math.floor(Math.random() * 200));
         }
       }
     }
@@ -150,44 +189,77 @@ export class GeminiClient implements ModelClient {
 
   private async once(model: string, req: ModelRequest): Promise<ModelResponse> {
     const started = Date.now();
+    let res: Response;
     try {
-      const res = await this.ai.models.generateContent({
-        model,
-        contents: req.input,
-        config: {
-          systemInstruction: req.system,
+      res = await (this.options.fetchFn ?? fetch)(GROQ_URL, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
           temperature: 0,
-          responseMimeType: "application/json",
-          responseJsonSchema: req.jsonSchema,
-          thinkingConfig: { thinkingLevel: req.thinking === "LOW" ? ThinkingLevel.LOW : ThinkingLevel.MINIMAL },
-          abortSignal: AbortSignal.timeout(this.options.timeoutMs ?? CALL_TIMEOUT_MS),
+          messages: [
+            { role: "system", content: req.system },
+            { role: "user", content: req.input },
+          ],
+          response_format: { type: "json_schema", json_schema: { name: req.kind, strict: true, schema: req.jsonSchema } },
+          reasoning_effort: req.reasoning,
+          include_reasoning: false,
+          max_completion_tokens: 2048,
           // Deliberately no `tools`: the model can only answer, never act.
-        },
+        }),
+        signal: AbortSignal.timeout(this.options.timeoutMs ?? CALL_TIMEOUT_MS),
       });
-      const u = res.usageMetadata ?? {};
-      return {
-        model,
-        text: res.text ?? "",
-        usage: { inputTokens: u.promptTokenCount ?? 0, outputTokens: u.candidatesTokenCount ?? 0, thinkingTokens: u.thoughtsTokenCount ?? 0 },
-        latencyMs: Date.now() - started,
-        cached: false,
-      };
     } catch (error) {
-      const e = error as { status?: number; name?: string; message?: string };
-      const timedOut = e.name === "TimeoutError" || e.name === "AbortError" || /abort|timed? ?out/i.test(e.message ?? "");
-      const status = e.status ?? (/"code":\s*(\d{3})/.exec(e.message ?? "")?.[1] ? Number(/"code":\s*(\d{3})/.exec(e.message ?? "")![1]) : undefined);
-      const retryable = timedOut || status === undefined || status === 429 || status >= 500;
-      // Gemini's 429 body carries "retryDelay": "12s" (or "12.5s") for per-minute limits.
-      const delay = /"retryDelay":\s*"(\d+(?:\.\d+)?)s"/.exec(e.message ?? "");
-      const retryAfterMs = status === 429 ? (delay ? Math.ceil(Number(delay[1]) * 1000) : 15_000) : null;
-      throw new ModelCallError(`${model} ${req.kind} ${timedOut ? "timed out" : `failed (${status ?? "no status"})`}: ${(e.message ?? "").slice(0, 200)}`, retryable, retryAfterMs);
+      const e = error as Error;
+      const timedOut = e.name === "TimeoutError" || e.name === "AbortError";
+      throw new ModelCallError(`${model} ${req.kind} ${timedOut ? "timed out" : `network error: ${e.message}`}`, true);
     }
+
+    this.limits.set(model, {
+      limitTokensPerMinute: numberHeader(res, "x-ratelimit-limit-tokens"),
+      remainingTokens: numberHeader(res, "x-ratelimit-remaining-tokens"),
+      resetTokensMs: parseDuration(res.headers.get("x-ratelimit-reset-tokens")),
+      limitRequestsPerDay: numberHeader(res, "x-ratelimit-limit-requests"),
+      remainingRequestsToday: numberHeader(res, "x-ratelimit-remaining-requests"),
+      seenAt: Date.now(),
+    });
+
+    if (!res.ok) {
+      const body = (await res.text()).slice(0, 400);
+      const retryAfterMs =
+        res.status === 429 ? (parseDuration(res.headers.get("retry-after")) ?? parseDuration(res.headers.get("x-ratelimit-reset-tokens")) ?? 15_000) : null;
+      const retryable = res.status === 429 || res.status >= 500;
+      throw new ModelCallError(`${model} ${req.kind} failed (${res.status}): ${body}`, retryable, retryAfterMs);
+    }
+
+    const json = (await res.json()) as {
+      choices?: { message?: { content?: string | null } }[];
+      usage?: { prompt_tokens?: number; completion_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } };
+    };
+    const reasoning = json.usage?.completion_tokens_details?.reasoning_tokens ?? 0;
+    return {
+      model,
+      text: json.choices?.[0]?.message?.content ?? "",
+      usage: {
+        inputTokens: json.usage?.prompt_tokens ?? 0,
+        outputTokens: Math.max(0, (json.usage?.completion_tokens ?? 0) - reasoning),
+        thinkingTokens: reasoning,
+      },
+      latencyMs: Date.now() - started,
+      cached: false,
+    };
   }
+}
+
+function numberHeader(res: Response, name: string): number | null {
+  const v = res.headers.get(name);
+  const n = v === null ? NaN : Number(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 export function requestHash(req: ModelRequest): string {
   return createHash("sha256")
-    .update(JSON.stringify([req.kind, req.model, req.promptVersion, req.system, req.input, req.jsonSchema, req.thinking]))
+    .update(JSON.stringify([req.kind, req.model, req.promptVersion, req.system, req.input, req.jsonSchema, req.reasoning]))
     .digest("hex");
 }
 

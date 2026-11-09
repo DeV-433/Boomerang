@@ -1,5 +1,5 @@
 /**
- * Live evaluation for BUILD_PLAN 5.3 (and 5.7): 20 varied cases through the real Gemini decision
+ * Live evaluation for BUILD_PLAN 5.3 (and 5.7): 20 varied cases through the real Groq decision
  * and drafting calls. Done when every decision validates. Also reports agreement with the rules,
  * draft lint results, latency and cost. Calls are recorded in model_calls under run tag "eval-decide".
  *   npx tsx packages/agent/evals/decide.ts
@@ -8,7 +8,7 @@ import { diagnose, proposeByRules, type CaseSnapshot } from "@boomerang/cases";
 import { createLogger, loadConfig, requireConfig } from "@boomerang/core";
 import { createDb } from "@boomerang/db";
 import { decide } from "../src/agent";
-import { GeminiClient, RecordingClient, UsageMeter } from "../src/model";
+import { GroqClient, RecordingClient, UsageMeter } from "../src/model";
 
 const NOW = new Date("2026-11-10T15:00:00Z");
 const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3_600_000);
@@ -65,7 +65,7 @@ const CASES: [string, CaseSnapshot][] = [
 const config = loadConfig();
 const db = createDb(requireConfig(config, "DATABASE_URL"));
 const meter = new UsageMeter();
-const client = new RecordingClient(new GeminiClient(requireConfig(config, "GEMINI_API_KEY"), { rpm: config.GEMINI_RPM ?? 10 }), {
+const client = new RecordingClient(new GroqClient(requireConfig(config, "GROQ_API_KEY"), { rpm: config.GROQ_RPM }), {
   db: db.db,
   runTag: "eval-decide",
   meter,

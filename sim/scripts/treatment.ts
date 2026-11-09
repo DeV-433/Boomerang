@@ -5,7 +5,7 @@
  * The agent run records every model call in model_calls and reuses cached answers, so a re-run is
  * free and gives the same decisions.
  */
-import { agentProposer, GeminiClient, RecordingClient, UsageMeter } from "@boomerang/agent";
+import { agentProposer, GroqClient, RecordingClient, UsageMeter } from "@boomerang/agent";
 import { proposeByRules } from "@boomerang/cases";
 import { loadConfig, requireConfig } from "@boomerang/core";
 import { createDb } from "@boomerang/db";
@@ -34,7 +34,7 @@ try {
   const meter = new UsageMeter();
   let proposer = proposeByRules as Parameters<typeof loopStrategy>[0]["proposer"];
   if (which === "agent") {
-    const client = new RecordingClient(new GeminiClient(requireConfig(config, "GEMINI_API_KEY"), { rpm: config.GEMINI_RPM ?? 10 }), {
+    const client = new RecordingClient(new GroqClient(requireConfig(config, "GROQ_API_KEY"), { rpm: config.GROQ_RPM }), {
       db: db.db,
       cache: true,
       runTag: `sim:${batch.seed}:treatment:agent`,
