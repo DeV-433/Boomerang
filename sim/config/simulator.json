@@ -102,5 +102,24 @@
   "baseline": {
     "invoiceReminderDays": [0, 3, 7, 14, 21, 28],
     "subscriptionDunningDays": [1, 7, 14]
+  },
+  "payPage": {
+    "useProbability": {
+      "would_pay_after_nudge": 0.12,
+      "needs_card_update": 0.1,
+      "promises_then_pays": 0.15,
+      "slow_payer": 0.1,
+      "disputer": 0,
+      "opts_out": 0.02
+    },
+    "payShare": {
+      "would_pay_after_nudge": 0.7,
+      "needs_card_update": 0.6,
+      "promises_then_pays": 0.3,
+      "slow_payer": 0.4,
+      "disputer": 0,
+      "opts_out": 0.5
+    },
+    "promiseInDays": { "min": 2, "max": 14 }
   }
 }

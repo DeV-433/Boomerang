@@ -1,5 +1,11 @@
 import { agentProposer, classifyPendingReplies, GroqClient, RecordingClient } from "@boomerang/agent";
-import { pollInvoices, processPendingEvents, runDueJobs, type LoopDeps } from "@boomerang/cases";
+import {
+  configurePayLinks,
+  pollInvoices,
+  processPendingEvents,
+  runDueJobs,
+  type LoopDeps,
+} from "@boomerang/cases";
 import { createLogger, loadConfig, requireConfig } from "@boomerang/core";
 import { createDb, pingDb } from "@boomerang/db";
 import { assertToolkitReady, createPayPal } from "@boomerang/paypal";
@@ -18,20 +24,33 @@ const toolkit = assertToolkitReady();
 logger.info({ toolkitVersion: toolkit.version, enabled: toolkit.enabled }, "PayPal Agent Toolkit loaded");
 const paypal = createPayPal(config, { db: db.db, logger });
 
+// 7C.6: reminders link to the signed pay page when both settings are present (same as the API).
+const payLinks =
+  config.PAY_LINK_SECRET && config.PUBLIC_BASE_URL
+    ? { secret: config.PAY_LINK_SECRET, baseUrl: config.PUBLIC_BASE_URL }
+    : null;
+configurePayLinks(payLinks);
+logger.info({ payLinksInMessages: Boolean(payLinks) }, "pay links");
+
 const TICK_MS = Number(process.env.WORKER_TICK_MS ?? 5_000);
 const POLL_MS = Number(process.env.INVOICE_POLL_MS ?? 5 * 60_000);
 
 // 5.10: with a Groq key the agent proposes (rules are the fallback); without one, the rules do.
 // The worker uses GROQ_API_KEY alone: GROQ_API_KEYS (teammates' keys) is for local simulations and evals only.
 const model = config.GROQ_API_KEY
-  ? new RecordingClient(new GroqClient(config.GROQ_API_KEY, { rpm: config.GROQ_RPM }), { db: db.db, runTag: "worker" })
+  ? new RecordingClient(new GroqClient(config.GROQ_API_KEY, { rpm: config.GROQ_RPM }), {
+      db: db.db,
+      runTag: "worker",
+    })
   : null;
 const deps: LoopDeps = {
   db: db.db,
   gateway: paypal.gateway,
   logger,
   mode: config.POLICY_MODE,
-  ...(model ? { proposer: agentProposer({ client: model, onValidated: (req, ok) => model.markValid(req, ok) }) } : {}),
+  ...(model
+    ? { proposer: agentProposer({ client: model, onValidated: (req, ok) => model.markValid(req, ok) }) }
+    : {}),
 };
 logger.info({ proposer: model ? "agent (rules fallback)" : "rules" }, "proposer");
 let stopping = false;
@@ -48,14 +67,25 @@ async function tick(): Promise<void> {
     if (Date.now() - lastPoll >= POLL_MS) {
       lastPoll = Date.now();
       try {
-        await pollInvoices({ db: db.db, gateway: paypal.gateway, merchantTimezone: DEFAULT_POLICY.hours.merchantTimezone, logger });
+        await pollInvoices({
+          db: db.db,
+          gateway: paypal.gateway,
+          merchantTimezone: DEFAULT_POLICY.hours.merchantTimezone,
+          logger,
+        });
       } catch (err) {
         logger.error({ err }, "invoice poll failed");
       }
     }
     const results = await runDueJobs(deps);
     if (processed > 0 || results.length > 0) {
-      logger.info({ eventsProcessed: processed, checks: results.map((r) => `${r.outcome}${r.detail ? `:${r.detail}` : ""}`) }, "worker tick");
+      logger.info(
+        {
+          eventsProcessed: processed,
+          checks: results.map((r) => `${r.outcome}${r.detail ? `:${r.detail}` : ""}`),
+        },
+        "worker tick",
+      );
     }
   } catch (err) {
     logger.error({ err }, "worker tick failed");

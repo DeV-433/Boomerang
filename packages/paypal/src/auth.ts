@@ -1,4 +1,10 @@
-import { apiBaseUrl, errorFromResponse, PayPalHttpError, type FetchLike, type PayPalEnvironment } from "./http";
+import {
+  apiBaseUrl,
+  errorFromResponse,
+  PayPalHttpError,
+  type FetchLike,
+  type PayPalEnvironment,
+} from "./http";
 
 export interface PayPalCredentials {
   clientId: string;
@@ -68,7 +74,9 @@ export class TokenManager {
   }
 
   private async fetchToken(): Promise<string> {
-    const basic = Buffer.from(`${this.credentials.clientId}:${this.credentials.clientSecret}`).toString("base64");
+    const basic = Buffer.from(`${this.credentials.clientId}:${this.credentials.clientSecret}`).toString(
+      "base64",
+    );
     const res = await this.fetchFn(`${this.baseUrl}/v1/oauth2/token`, {
       method: "POST",
       headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/x-www-form-urlencoded" },

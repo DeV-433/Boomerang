@@ -12,7 +12,10 @@ export interface PayPalServices {
 }
 
 /** Wires the PayPal layer from configuration. Without a database, idempotency is kept in memory. */
-export function createPayPal(config: Config, options: { db?: Database; logger?: Logger } = {}): PayPalServices {
+export function createPayPal(
+  config: Config,
+  options: { db?: Database; logger?: Logger } = {},
+): PayPalServices {
   const tokens = new TokenManager({
     clientId: requireConfig(config, "PAYPAL_CLIENT_ID"),
     clientSecret: requireConfig(config, "PAYPAL_CLIENT_SECRET"),

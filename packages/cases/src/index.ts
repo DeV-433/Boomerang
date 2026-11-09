@@ -10,7 +10,15 @@ export {
   type Diagnosis,
 } from "./diagnose";
 export { proposeByRules, RULES_CONFIDENCE, PAYMENT_PLAN_MIN_CENTS } from "./propose";
-export { renderMessage, paymentLink, messageFacts, OPT_OUT_LINE, type TemplateId } from "./messages";
+export {
+  renderMessage,
+  paymentLink,
+  paypalPayLink,
+  configurePayLinks,
+  messageFacts,
+  OPT_OUT_LINE,
+  type TemplateId,
+} from "./messages";
 export {
   runCaseCheck,
   decideApproval,

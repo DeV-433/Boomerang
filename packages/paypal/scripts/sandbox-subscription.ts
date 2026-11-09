@@ -6,12 +6,20 @@
  */
 import { createLogger, loadConfig, requireConfig } from "@boomerang/core";
 import { createDb } from "@boomerang/db";
-import { captureSubscriptionBalance, createPayPal, showSubscriptionDetails, subscriptionRisk } from "../src/index";
+import {
+  captureSubscriptionBalance,
+  createPayPal,
+  showSubscriptionDetails,
+  subscriptionRisk,
+} from "../src/index";
 
 const config = loadConfig();
 if (config.PAYPAL_ENVIRONMENT !== "SANDBOX") throw new Error("sandbox only");
 const db = createDb(requireConfig(config, "DATABASE_URL"));
-const { gateway } = createPayPal(config, { db: db.db, logger: createLogger({ name: "sandbox-sub", level: "warn" }) });
+const { gateway } = createPayPal(config, {
+  db: db.db,
+  logger: createLogger({ name: "sandbox-sub", level: "warn" }),
+});
 const [command, subscriptionId] = process.argv.slice(2);
 const run = `sub-${Date.now()}`;
 
@@ -43,7 +51,11 @@ try {
       },
       { idempotencyKey: `${run}:plan` },
     );
-    const sub = await gateway.callTool<{ id: string; status: string; links?: { href: string; rel: string }[] }>(
+    const sub = await gateway.callTool<{
+      id: string;
+      status: string;
+      links?: { href: string; rel: string }[];
+    }>(
       "seeder",
       "create_subscription",
       {
@@ -62,7 +74,11 @@ try {
     console.log(`APPROVE_URL=${sub.data.links?.find((l) => l.rel === "approve")?.href}`);
   } else if (command === "check" && subscriptionId) {
     const sub = await showSubscriptionDetails(gateway, subscriptionId);
-    console.log("2.8", JSON.stringify(subscriptionRisk(sub)), `next_billing=${sub.billing_info?.next_billing_time ?? "-"}`);
+    console.log(
+      "2.8",
+      JSON.stringify(subscriptionRisk(sub)),
+      `next_billing=${sub.billing_info?.next_billing_time ?? "-"}`,
+    );
   } else if (command === "capture" && subscriptionId) {
     // Captures only a real balance. The sandbox cannot create one on demand (PATCH can only lower
     // it), so on a healthy subscription this shows PayPal's ZERO_OUTSTANDING_BALANCE verdict instead.
@@ -78,7 +94,10 @@ try {
       (e: { status?: number; body?: string }) => `PayPal refused: HTTP ${e.status} ${e.body}`,
     );
     console.log(result);
-    console.log("after capture ", JSON.stringify(subscriptionRisk(await showSubscriptionDetails(gateway, subscriptionId))));
+    console.log(
+      "after capture ",
+      JSON.stringify(subscriptionRisk(await showSubscriptionDetails(gateway, subscriptionId))),
+    );
   } else {
     console.log("usage: setup | check <subscription-id> | capture <subscription-id>");
   }

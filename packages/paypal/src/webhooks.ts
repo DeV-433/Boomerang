@@ -28,7 +28,11 @@ function header(headers: WebhookHeaders, name: string): string | undefined {
  * bytes PayPal sent, not a re-serialized object: re-serializing can reorder keys or change number
  * formatting, which breaks the signature.
  */
-export function buildVerificationBody(headers: WebhookHeaders, rawBody: string, webhookId: string): string | null {
+export function buildVerificationBody(
+  headers: WebhookHeaders,
+  rawBody: string,
+  webhookId: string,
+): string | null {
   const fields: Record<string, string> = {};
   for (const name of PAYPAL_WEBHOOK_HEADERS) {
     const value = header(headers, name);

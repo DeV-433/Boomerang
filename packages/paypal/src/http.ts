@@ -18,7 +18,9 @@ export class PayPalHttpError extends Error {
     context: string,
     readonly retryAfterMs: number | null = null,
   ) {
-    super(`${context} failed with ${status === null ? "no response" : `HTTP ${status}`}${debugId ? ` (debug id ${debugId})` : ""}`);
+    super(
+      `${context} failed with ${status === null ? "no response" : `HTTP ${status}`}${debugId ? ` (debug id ${debugId})` : ""}`,
+    );
     this.name = "PayPalHttpError";
   }
 

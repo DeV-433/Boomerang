@@ -131,7 +131,9 @@ export const cases = pgTable(
   },
   (t) => [
     // At most one open case per PayPal object, so a poller or a duplicate event cannot open two.
-    uniqueIndex("cases_one_open_per_ref").on(t.lane, t.paypalRef).where(sql`${t.closedAt} is null`),
+    uniqueIndex("cases_one_open_per_ref")
+      .on(t.lane, t.paypalRef)
+      .where(sql`${t.closedAt} is null`),
     index("cases_state_idx").on(t.state),
     index("cases_customer_idx").on(t.customerId),
   ],
@@ -158,7 +160,9 @@ export const events = pgTable(
     processedAt: timestamp("processed_at", { withTimezone: true }),
   },
   (t) => [
-    index("events_unprocessed_idx").on(t.receivedAt).where(sql`${t.processedAt} is null`),
+    index("events_unprocessed_idx")
+      .on(t.receivedAt)
+      .where(sql`${t.processedAt} is null`),
     index("events_case_idx").on(t.caseId),
   ],
 );
@@ -335,7 +339,12 @@ export const jobs = pgTable(
     createdAt: createdAt(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
   },
-  (t) => [index("jobs_due_idx").on(t.runAt).where(sql`${t.status} = 'pending'`), index("jobs_case_idx").on(t.caseId)],
+  (t) => [
+    index("jobs_due_idx")
+      .on(t.runAt)
+      .where(sql`${t.status} = 'pending'`),
+    index("jobs_case_idx").on(t.caseId),
+  ],
 );
 
 // Gate rule 4: global kill switch ------------------------------------------------------------------------
@@ -373,7 +382,10 @@ export const modelCalls = pgTable(
     caseId: uuid("case_id"),
     createdAt: createdAt(),
   },
-  (t) => [index("model_calls_cache_idx").on(t.kind, t.model, t.inputHash), index("model_calls_run_idx").on(t.runTag)],
+  (t) => [
+    index("model_calls_cache_idx").on(t.kind, t.model, t.inputHash),
+    index("model_calls_run_idx").on(t.runTag),
+  ],
 );
 
 // 7A.9: saved what-if scenarios -----------------------------------------------------------------------

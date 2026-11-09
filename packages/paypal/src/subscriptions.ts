@@ -8,14 +8,21 @@ export interface PayPalSubscription {
   billing_info?: {
     outstanding_balance?: { currency_code: string; value: string };
     failed_payments_count?: number;
-    last_failed_payment?: { amount?: { currency_code: string; value: string }; time?: string; reason_code?: string };
+    last_failed_payment?: {
+      amount?: { currency_code: string; value: string };
+      time?: string;
+      reason_code?: string;
+    };
     next_billing_time?: string;
   };
   [key: string]: unknown;
 }
 
 /** 2.8: status, failed-payment count and outstanding balance for a subscription (read-only). */
-export async function showSubscriptionDetails(gw: PayPalGateway, subscriptionId: string): Promise<PayPalSubscription> {
+export async function showSubscriptionDetails(
+  gw: PayPalGateway,
+  subscriptionId: string,
+): Promise<PayPalSubscription> {
   const { data } = await gw.callTool<PayPalSubscription>("subscription", "show_subscription_details", {
     subscription_id: subscriptionId,
   });
@@ -33,7 +40,10 @@ export function subscriptionRisk(sub: PayPalSubscription): {
   return {
     status: sub.status,
     failedPayments: sub.billing_info?.failed_payments_count ?? 0,
-    outstanding: balance && Number(balance.value) > 0 ? { currencyCode: balance.currency_code, value: balance.value } : null,
+    outstanding:
+      balance && Number(balance.value) > 0
+        ? { currencyCode: balance.currency_code, value: balance.value }
+        : null,
     lastFailureReason: sub.billing_info?.last_failed_payment?.reason_code ?? null,
   };
 }
@@ -48,7 +58,8 @@ export async function captureSubscriptionBalance(
   input: { subscriptionId: string; amount: { currencyCode: string; value: string }; note: string },
   idempotencyKey: string,
 ): Promise<CallResult<{ id?: string; status?: string }>> {
-  if (!/^I-[A-Z0-9]+$/.test(input.subscriptionId)) throw new Error(`Invalid subscription id: ${input.subscriptionId}`);
+  if (!/^I-[A-Z0-9]+$/.test(input.subscriptionId))
+    throw new Error(`Invalid subscription id: ${input.subscriptionId}`);
   return gw.callRest(
     "subscription",
     "capture_subscription_balance",

@@ -16,6 +16,12 @@ export interface ArmMetrics {
   optOuts: number;
   /** Messages sent to customers who had already opted out. Must be zero for Boomerang. */
   contactsAfterOptOut: number;
+  /** 7C.7: customers who acted on the self-serve pay page (paid, updated a card, or promised a date). */
+  payPageUses: number;
+  /** Cases paid directly on the pay page. */
+  payPagePayments: number;
+  /** Promises made on the pay page. */
+  payPagePromises: number;
 }
 
 export function median(values: readonly number[]): number | null {
@@ -46,6 +52,13 @@ export function computeMetrics(results: readonly CaseResult[]): ArmMetrics {
         r.outcome === "opted_out" || r.timeline.some((t) => t.event === "contact" && t.outcome === "opt_out"),
     ).length,
     contactsAfterOptOut: results.reduce((s, r) => s + r.contactsAfterOptOut, 0),
+    payPageUses: results.filter((r) => r.timeline.some((t) => t.event === "page")).length,
+    payPagePayments: results.filter((r) => r.timeline.some((t) => t.event === "paid" && t.via === "page"))
+      .length,
+    payPagePromises: results.reduce(
+      (s, r) => s + r.timeline.filter((t) => t.event === "page" && t.action === "promise").length,
+      0,
+    ),
   };
 }
 

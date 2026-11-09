@@ -18,7 +18,10 @@ export function toolkitVersion(): string {
   let dir = dirname(toolkitRequire.resolve("@paypal/agent-toolkit/mcp"));
   for (let i = 0; i < 5; i++) {
     try {
-      const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as { name?: string; version?: string };
+      const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as {
+        name?: string;
+        version?: string;
+      };
       if (pkg.name === "@paypal/agent-toolkit" && pkg.version) return pkg.version;
     } catch {
       // keep walking up
@@ -35,7 +38,14 @@ export interface ToolDefinition {
   method: string;
   name: string;
   /** Zod schema shipped with the toolkit. */
-  parameters: { safeParse(input: unknown): { success: boolean; data?: unknown; error?: { issues: { path: (string | number)[]; message: string }[] } }; shape?: Record<string, unknown> };
+  parameters: {
+    safeParse(input: unknown): {
+      success: boolean;
+      data?: unknown;
+      error?: { issues: { path: (string | number)[]; message: string }[] };
+    };
+    shape?: Record<string, unknown>;
+  };
   /** The configuration flag that enables this tool, e.g. { invoices: { sendReminder: true } }. */
   actions: Record<string, Record<string, boolean>>;
 }
@@ -89,8 +99,9 @@ function installErrorCapture(): void {
     (response) => response,
     (error) => {
       const store = capture.getStore();
-      const res = (error as { response?: { status: number; data: unknown; headers?: Record<string, string> } })
-        .response;
+      const res = (
+        error as { response?: { status: number; data: unknown; headers?: Record<string, string> } }
+      ).response;
       if (store && res) {
         store.lastError = {
           status: res.status,
@@ -115,14 +126,20 @@ export interface ToolkitCallOptions {
  * Executes one toolkit tool and returns PayPal's parsed response, or throws PayPalHttpError.
  * A fresh PayPalAPI is built per call so each call carries the current token and its own request id.
  */
-export async function runToolkitMethod(method: string, args: unknown, options: ToolkitCallOptions): Promise<unknown> {
+export async function runToolkitMethod(
+  method: string,
+  args: unknown,
+  options: ToolkitCallOptions,
+): Promise<unknown> {
   installErrorCapture();
   const api = new PayPalAPI(options.accessToken, {
     sandbox: options.sandbox,
     ...(options.requestId ? { request_id: options.requestId } : {}),
   });
   // executeMethod throws on failure; the public run() would hide the error inside a JSON string.
-  const execute = (api as unknown as { executeMethod(m: string, a: unknown): Promise<unknown> }).executeMethod.bind(api);
+  const execute = (
+    api as unknown as { executeMethod(m: string, a: unknown): Promise<unknown> }
+  ).executeMethod.bind(api);
   const store = { lastError: null as CapturedResponse | null };
   return capture.run(store, async () => {
     try {

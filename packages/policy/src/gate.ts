@@ -133,19 +133,36 @@ const HOUR = 3_600_000;
 
 /** Local hour (0-23) and weekday (0 = Sunday) of `at` in `timeZone`. */
 export function localTime(at: Date, timeZone: string): { hour: number; weekday: number } {
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", hourCycle: "h23", weekday: "short" }).formatToParts(at);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    hourCycle: "h23",
+    weekday: "short",
+  }).formatToParts(at);
   const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0") % 24;
-  const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(parts.find((p) => p.type === "weekday")?.value ?? "Sun");
+  const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(
+    parts.find((p) => p.type === "weekday")?.value ?? "Sun",
+  );
   return { hour, weekday };
 }
 
 /** The contact window that applies: the customer's, or the narrower merchant fallback when unknown. */
-export function contactWindow(input: Pick<GateInput, "customerTimezone" | "policy">): { timeZone: string; start: number; end: number; days: number[] } {
+export function contactWindow(input: Pick<GateInput, "customerTimezone" | "policy">): {
+  timeZone: string;
+  start: number;
+  end: number;
+  days: number[];
+} {
   const h = input.policy.hours;
   const known = input.customerTimezone && isValidTimeZone(input.customerTimezone);
   return known
     ? { timeZone: input.customerTimezone!, start: h.start, end: h.end, days: h.days }
-    : { timeZone: h.merchantTimezone, start: h.unknownTimezoneStart, end: h.unknownTimezoneEnd, days: h.days };
+    : {
+        timeZone: h.merchantTimezone,
+        start: h.unknownTimezoneStart,
+        end: h.unknownTimezoneEnd,
+        days: h.days,
+      };
 }
 
 function isValidTimeZone(tz: string): boolean {
@@ -163,7 +180,10 @@ const STEP = 15 * 60_000;
  * First moment at or after `from` that is inside the window. Steps in 15 minutes, because some
  * zones are offset from UTC by half or quarter hours (India +5:30, Nepal +5:45).
  */
-export function nextWindowStart(from: Date, window: { timeZone: string; start: number; end: number; days: number[] }): Date {
+export function nextWindowStart(
+  from: Date,
+  window: { timeZone: string; start: number; end: number; days: number[] },
+): Date {
   let t = new Date(Math.ceil(from.getTime() / STEP) * STEP);
   for (let i = 0; i < 96 * 8; i++) {
     const { hour, weekday } = localTime(t, window.timeZone);
@@ -193,26 +213,45 @@ export const RULES: readonly Rule[] = [
   {
     rule: 2,
     name: "dispute_open",
-    check: (i) => (i.disputed ? { verdict: "block", effect: { kind: "escalate" }, reason: "a dispute is open; a person takes over" } : null),
+    check: (i) =>
+      i.disputed
+        ? { verdict: "block", effect: { kind: "escalate" }, reason: "a dispute is open; a person takes over" }
+        : null,
   },
   {
     rule: 3,
     name: "opted_out",
-    check: (i) => (i.optedOut ? { verdict: "block", effect: { kind: "stop" }, reason: "the customer asked not to be contacted" } : null),
+    check: (i) =>
+      i.optedOut
+        ? { verdict: "block", effect: { kind: "stop" }, reason: "the customer asked not to be contacted" }
+        : null,
   },
   {
     rule: 4,
     name: "kill_switch",
-    check: (i) => (i.systemPaused ? { verdict: "block", effect: { kind: "pause" }, reason: "the operator has paused all activity" } : null),
+    check: (i) =>
+      i.systemPaused
+        ? { verdict: "block", effect: { kind: "pause" }, reason: "the operator has paused all activity" }
+        : null,
   },
   {
     rule: 5,
     name: "action_whitelist",
     check: (i) => {
       const action = i.proposal.action;
-      if (!isActionFor(i.lane, action)) return { verdict: "block", effect: { kind: "escalate" }, reason: `"${action}" is not on the ${i.lane} action menu` };
+      if (!isActionFor(i.lane, action))
+        return {
+          verdict: "block",
+          effect: { kind: "escalate" },
+          reason: `"${action}" is not on the ${i.lane} action menu`,
+        };
       const tool = ACTION_TOOL[action as Action];
-      if (tool && !i.enabledTools.includes(tool)) return { verdict: "block", effect: { kind: "escalate" }, reason: `tool "${tool}" is not enabled for the ${i.lane} lane` };
+      if (tool && !i.enabledTools.includes(tool))
+        return {
+          verdict: "block",
+          effect: { kind: "escalate" },
+          reason: `tool "${tool}" is not enabled for the ${i.lane} lane`,
+        };
       return null;
     },
   },
@@ -221,9 +260,18 @@ export const RULES: readonly Rule[] = [
     name: "attempt_cap",
     check: (i) => {
       if (!contact(i)) return null;
-      if (i.contactsOnCase >= i.policy.caps.perCase) return { verdict: "block", effect: { kind: "escalate" }, reason: `case already has ${i.contactsOnCase} contacts (cap ${i.policy.caps.perCase})` };
+      if (i.contactsOnCase >= i.policy.caps.perCase)
+        return {
+          verdict: "block",
+          effect: { kind: "escalate" },
+          reason: `case already has ${i.contactsOnCase} contacts (cap ${i.policy.caps.perCase})`,
+        };
       if (i.customerContactsLast7Days >= i.policy.caps.perCustomerPerWeek) {
-        return { verdict: "block", effect: { kind: "escalate" }, reason: `customer had ${i.customerContactsLast7Days} contacts this week (cap ${i.policy.caps.perCustomerPerWeek})` };
+        return {
+          verdict: "block",
+          effect: { kind: "escalate" },
+          reason: `customer had ${i.customerContactsLast7Days} contacts this week (cap ${i.policy.caps.perCustomerPerWeek})`,
+        };
       }
       return null;
     },
@@ -234,7 +282,13 @@ export const RULES: readonly Rule[] = [
     check: (i) => {
       if (!contact(i) || !i.lastContactAt) return null;
       const earliest = new Date(i.lastContactAt.getTime() + i.policy.thresholds.minGapHours * HOUR);
-      return i.now < earliest ? { verdict: "block", effect: { kind: "retry_at", at: earliest }, reason: `minimum gap of ${i.policy.thresholds.minGapHours}h since last contact not reached` } : null;
+      return i.now < earliest
+        ? {
+            verdict: "block",
+            effect: { kind: "retry_at", at: earliest },
+            reason: `minimum gap of ${i.policy.thresholds.minGapHours}h since last contact not reached`,
+          }
+        : null;
     },
   },
   {
@@ -256,8 +310,15 @@ export const RULES: readonly Rule[] = [
     rule: 9,
     name: "amount_threshold",
     check: (i) =>
-      !terminal(i) && !i.approvedByHuman && !isWaitOnly(i) && i.amountCents > i.policy.thresholds.approvalAmountCents
-        ? { verdict: "hold", effect: { kind: "approval" }, reason: `case value ${(i.amountCents / 100).toFixed(2)} is above the approval limit` }
+      !terminal(i) &&
+      !i.approvedByHuman &&
+      !isWaitOnly(i) &&
+      i.amountCents > i.policy.thresholds.approvalAmountCents
+        ? {
+            verdict: "hold",
+            effect: { kind: "approval" },
+            reason: `case value ${(i.amountCents / 100).toFixed(2)} is above the approval limit`,
+          }
         : null,
   },
   {
@@ -265,7 +326,11 @@ export const RULES: readonly Rule[] = [
     name: "confidence",
     check: (i) =>
       !terminal(i) && !i.approvedByHuman && i.proposal.confidence < i.policy.thresholds.confidenceFloor
-        ? { verdict: "hold", effect: { kind: "approval" }, reason: `confidence ${i.proposal.confidence} is below the floor ${i.policy.thresholds.confidenceFloor}` }
+        ? {
+            verdict: "hold",
+            effect: { kind: "approval" },
+            reason: `confidence ${i.proposal.confidence} is below the floor ${i.policy.thresholds.confidenceFloor}`,
+          }
         : null,
   },
   {
@@ -274,7 +339,9 @@ export const RULES: readonly Rule[] = [
     check: (i) => {
       if (!i.messageLint || i.messageLint.ok) return null;
       const reason = `message failed lint: ${i.messageLint.issues.join("; ")}`;
-      return i.redrafted ? { verdict: "hold", effect: { kind: "approval" }, reason } : { verdict: "block", effect: { kind: "redraft" }, reason };
+      return i.redrafted
+        ? { verdict: "hold", effect: { kind: "approval" }, reason }
+        : { verdict: "block", effect: { kind: "redraft" }, reason };
     },
   },
   {
@@ -282,7 +349,11 @@ export const RULES: readonly Rule[] = [
     name: "sensitive_action",
     check: (i) =>
       !i.approvedByHuman && isSensitiveAction(i.proposal.action as Action)
-        ? { verdict: "hold", effect: { kind: "approval" }, reason: `"${i.proposal.action}" moves money and always needs a person's approval` }
+        ? {
+            verdict: "hold",
+            effect: { kind: "approval" },
+            reason: `"${i.proposal.action}" moves money and always needs a person's approval`,
+          }
         : null,
   },
 ];
@@ -298,11 +369,23 @@ export function evaluateGate(input: GateInput): GateDecision {
   let decision: { rule: Rule; outcome: RuleOutcome } | null = null;
   for (const rule of RULES) {
     const outcome = rule.check(input);
-    checks.push({ rule: rule.rule, name: rule.name, passed: outcome === null, ...(outcome ? { detail: outcome.reason } : {}) });
+    checks.push({
+      rule: rule.rule,
+      name: rule.name,
+      passed: outcome === null,
+      ...(outcome ? { detail: outcome.reason } : {}),
+    });
     if (outcome && !decision) decision = { rule, outcome };
   }
   if (!decision) {
-    return { verdict: "allow", decidedBy: 0, effect: { kind: "proceed" }, reasons: [], checks, policyVersion: input.policy.version };
+    return {
+      verdict: "allow",
+      decidedBy: 0,
+      effect: { kind: "proceed" },
+      reasons: [],
+      checks,
+      policyVersion: input.policy.version,
+    };
   }
   return {
     verdict: decision.outcome.verdict,

@@ -31,6 +31,8 @@ export interface StrategyView {
 
 export interface Strategy {
   name: string;
+  /** 7C.7: this strategy's messages carry the self-serve pay page link (Boomerang's do, the baseline's do not). */
+  carriesPayPage?: boolean;
   /** Contacts to send to this case today. Empty means wait. May be async (the agent calls a model). */
   contactsFor(view: StrategyView): ContactKind[] | Promise<ContactKind[]>;
 }
@@ -41,7 +43,8 @@ export type TimelineEntry =
   | { day: number; event: "paypal_failure_notice"; outcome: Outcome }
   | { day: number; event: "suspended" }
   | { day: number; event: "promise_due"; kept: boolean }
-  | { day: number; event: "paid"; via: "contact" | "promise" | "self" | "paypal_retry" };
+  | { day: number; event: "page"; action: "pay" | "update_card" | "promise"; promiseDay?: number }
+  | { day: number; event: "paid"; via: "contact" | "promise" | "page" | "self" | "paypal_retry" };
 
 export type CaseOutcome = "recovered" | "disputed" | "opted_out" | "unrecovered";
 
@@ -78,7 +81,7 @@ export async function simulateCase(
 
   // Mutated inside closures, so kept on an object (TypeScript cannot track closure writes to locals).
   const st: {
-    payDay: { day: number; via: "contact" | "promise" } | null;
+    payDay: { day: number; via: "contact" | "promise" | "page" } | null;
     pendingPromise: { day: number; kept: boolean } | null;
   } = { payDay: null, pendingPromise: null };
   let recoveredDay: number | null = null;
@@ -92,7 +95,7 @@ export async function simulateCase(
   let suspended = false;
   let cardFixed = false;
 
-  const schedulePay = (day: number, via: "contact" | "promise") => {
+  const schedulePay = (day: number, via: "contact" | "promise" | "page") => {
     if (!st.payDay || day < st.payDay.day) st.payDay = { day, via };
   };
 
@@ -113,7 +116,7 @@ export async function simulateCase(
     }
   };
 
-  const markPaid = (day: number, via: "contact" | "promise" | "self" | "paypal_retry") => {
+  const markPaid = (day: number, via: "contact" | "promise" | "page" | "self" | "paypal_retry") => {
     recoveredDay = day;
     timeline.push({ day, event: "paid", via });
   };
@@ -196,6 +199,36 @@ export async function simulateCase(
       customerContacts++;
       timeline.push({ day, event: "contact", kind, outcome: r.outcome, afterOptOut });
       handleResponse(day, r.outcome, r);
+      // 7C.7: instead of ignoring the message, the customer may use its pay-or-promise link.
+      const page = config.payPage;
+      if (
+        r.outcome === "ignore" &&
+        strategy.carriesPayPage &&
+        page &&
+        !disputed &&
+        !optedOut &&
+        rng.chance(page.useProbability[type], key, "page", day, n)
+      ) {
+        if (rng.chance(page.payShare[type], key, "page-pay", day, n)) {
+          if (simCase.lane === "subscription") {
+            // The page sends a subscriber to update their card; PayPal's next retry collects.
+            timeline.push({ day, event: "page", action: "update_card" });
+            cardFixed = true;
+          } else {
+            timeline.push({ day, event: "page", action: "pay" });
+            schedulePay(day, "page");
+          }
+        } else {
+          const promiseDay =
+            day + rng.int(page.promiseInDays.min, page.promiseInDays.max, key, "page-promise", day, n);
+          timeline.push({ day, event: "page", action: "promise", promiseDay });
+          st.pendingPromise = {
+            day: promiseDay,
+            kept: rng.chance(config.promise.keepProbability[type], key, "page-promise-kept", day, n),
+          };
+          observations.push({ day, kind: "reply", outcome: "promise", promiseDay });
+        }
+      }
     });
     // A same-day payment (pay delay 0) lands today.
     if (st.payDay && st.payDay.day <= day && !disputed) markPaid(day, st.payDay.via);

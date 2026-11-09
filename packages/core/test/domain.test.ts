@@ -67,7 +67,14 @@ describe("case state machine (4.1)", () => {
 
 describe("action menus (4.6)", () => {
   it("has the documented menus", () => {
-    expect(ACTION_MENUS.invoice).toEqual(["send_reminder", "offer_payment_plan", "schedule_promise_check", "wait", "escalate_to_human", "stop"]);
+    expect(ACTION_MENUS.invoice).toEqual([
+      "send_reminder",
+      "offer_payment_plan",
+      "schedule_promise_check",
+      "wait",
+      "escalate_to_human",
+      "stop",
+    ]);
     expect(ACTION_MENUS.subscription).toEqual([
       "send_update_payment_message",
       "wait_for_paypal_retry",
@@ -98,7 +105,9 @@ describe("action menus (4.6)", () => {
 
   it("maps every action to a PayPal tool or to nothing, never to a refund or cancellation", () => {
     for (const action of [...ACTION_MENUS.invoice, ...ACTION_MENUS.subscription]) {
-      expect(ACTION_TOOL[action] ?? "none").not.toMatch(/refund|cancel_sent|cancel_subscription|delete|accept_dispute/);
+      expect(ACTION_TOOL[action] ?? "none").not.toMatch(
+        /refund|cancel_sent|cancel_subscription|delete|accept_dispute/,
+      );
     }
   });
 });

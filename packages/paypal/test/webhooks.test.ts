@@ -33,7 +33,10 @@ function fakePayPal(): { fetchFn: FetchLike; calls: { url: string; body: string 
 }
 
 function verifierWith(fetchFn: FetchLike, webhookId: string | null = "WH-ID") {
-  const tokens = new TokenManager({ clientId: "id", clientSecret: "secret", environment: "SANDBOX" }, fetchFn);
+  const tokens = new TokenManager(
+    { clientId: "id", clientSecret: "secret", environment: "SANDBOX" },
+    fetchFn,
+  );
   return new PayPalWebhookVerifier(tokens, webhookId ?? undefined, fetchFn);
 }
 
@@ -42,7 +45,11 @@ describe("buildVerificationBody", () => {
     const body = buildVerificationBody(headers, rawBody, "WH-ID")!;
     expect(body).toContain(`"webhook_event":${rawBody}`);
     const parsed = JSON.parse(body);
-    expect(parsed).toMatchObject({ auth_algo: "SHA256withRSA", transmission_id: "tx-1", webhook_id: "WH-ID" });
+    expect(parsed).toMatchObject({
+      auth_algo: "SHA256withRSA",
+      transmission_id: "tx-1",
+      webhook_id: "WH-ID",
+    });
     expect(parsed.webhook_event.id).toBe("WH-1");
   });
 

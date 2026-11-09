@@ -24,7 +24,8 @@ export type CaseState = (typeof CASE_STATES)[number];
 export const END_STATES = ["recovered", "stopped", "escalated"] as const satisfies readonly CaseState[];
 export type EndState = (typeof END_STATES)[number];
 
-export const isEndState = (state: CaseState): state is EndState => (END_STATES as readonly string[]).includes(state);
+export const isEndState = (state: CaseState): state is EndState =>
+  (END_STATES as readonly string[]).includes(state);
 
 /** Every state a case can leave for an end state when a stop condition or payment arrives. */
 const TO_ENDS = [...END_STATES];
@@ -71,7 +72,12 @@ export function transition(from: CaseState, to: CaseState): CaseState {
 // 4.5: causes ------------------------------------------------------------------------------------------
 
 export const CAUSES = {
-  subscription: ["temporary_decline", "expired_funding_source", "threshold_reached", "cancelled_with_balance"],
+  subscription: [
+    "temporary_decline",
+    "expired_funding_source",
+    "threshold_reached",
+    "cancelled_with_balance",
+  ],
   invoice: ["overdue_no_engagement", "overdue_unresponsive", "promise_to_pay", "broken_promise"],
   any: ["dispute", "opted_out", "resolved"],
 } as const;
@@ -84,7 +90,14 @@ export const ALL_CAUSES: readonly Cause[] = [...CAUSES.subscription, ...CAUSES.i
 // 4.6: action menus as typed enums ---------------------------------------------------------------------
 
 export const ACTION_MENUS = {
-  invoice: ["send_reminder", "offer_payment_plan", "schedule_promise_check", "wait", "escalate_to_human", "stop"],
+  invoice: [
+    "send_reminder",
+    "offer_payment_plan",
+    "schedule_promise_check",
+    "wait",
+    "escalate_to_human",
+    "stop",
+  ],
   subscription: [
     "send_update_payment_message",
     "wait_for_paypal_retry",
@@ -105,15 +118,26 @@ export function isActionFor<L extends Lane>(lane: L, action: string): action is 
 }
 
 /** Actions that send a message to the customer. Caps, spacing and contact hours apply to these. */
-export const CONTACT_ACTIONS = ["send_reminder", "offer_payment_plan", "send_update_payment_message"] as const satisfies readonly Action[];
-export const isContactAction = (action: Action): boolean => (CONTACT_ACTIONS as readonly string[]).includes(action);
+export const CONTACT_ACTIONS = [
+  "send_reminder",
+  "offer_payment_plan",
+  "send_update_payment_message",
+] as const satisfies readonly Action[];
+export const isContactAction = (action: Action): boolean =>
+  (CONTACT_ACTIONS as readonly string[]).includes(action);
 
 /** Actions that move money or change something beyond a reminder: always held for a person (gate rule 12). */
 export const SENSITIVE_ACTIONS = ["request_balance_capture"] as const satisfies readonly Action[];
-export const isSensitiveAction = (action: Action): boolean => (SENSITIVE_ACTIONS as readonly string[]).includes(action);
+export const isSensitiveAction = (action: Action): boolean =>
+  (SENSITIVE_ACTIONS as readonly string[]).includes(action);
 
 /** Actions that only reschedule the case; nothing leaves Boomerang. */
-export const WAIT_ACTIONS = ["wait", "schedule_promise_check", "wait_for_paypal_retry", "schedule_follow_up"] as const satisfies readonly Action[];
+export const WAIT_ACTIONS = [
+  "wait",
+  "schedule_promise_check",
+  "wait_for_paypal_retry",
+  "schedule_follow_up",
+] as const satisfies readonly Action[];
 export const isWaitAction = (action: Action): boolean => (WAIT_ACTIONS as readonly string[]).includes(action);
 
 /**
@@ -172,6 +196,12 @@ export interface ProposalMeta {
   modelCause?: string;
   /** Set when the proposal came from the rules because the model could not be reached. */
   fallback?: string;
-  draft?: { model: string; promptVersion: string; personalNote: string; redrafted: boolean; lintIssues?: string[] };
+  draft?: {
+    model: string;
+    promptVersion: string;
+    personalNote: string;
+    redrafted: boolean;
+    lintIssues?: string[];
+  };
   usage?: { inputTokens: number; outputTokens: number; thinkingTokens: number; costUsd: number };
 }

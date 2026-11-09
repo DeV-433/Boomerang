@@ -132,12 +132,8 @@
           "name": "actions_case_id_cases_id_fk",
           "tableFrom": "actions",
           "tableTo": "cases",
-          "columnsFrom": [
-            "case_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["case_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -147,9 +143,7 @@
         "actions_idempotency_key_unique": {
           "name": "actions_idempotency_key_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "idempotency_key"
-          ]
+          "columns": ["idempotency_key"]
         }
       },
       "policies": {},
@@ -219,12 +213,8 @@
           "name": "approvals_action_id_actions_id_fk",
           "tableFrom": "approvals",
           "tableTo": "actions",
-          "columnsFrom": [
-            "action_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["action_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -234,9 +224,7 @@
         "approvals_action_id_unique": {
           "name": "approvals_action_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "action_id"
-          ]
+          "columns": ["action_id"]
         }
       },
       "policies": {},
@@ -325,12 +313,8 @@
           "name": "audit_log_case_id_cases_id_fk",
           "tableFrom": "audit_log",
           "tableTo": "cases",
-          "columnsFrom": [
-            "case_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["case_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -340,9 +324,7 @@
         "audit_log_hash_unique": {
           "name": "audit_log_hash_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "hash"
-          ]
+          "columns": ["hash"]
         }
       },
       "policies": {},
@@ -686,12 +668,8 @@
           "name": "cases_customer_id_customers_id_fk",
           "tableFrom": "cases",
           "tableTo": "customers",
-          "columnsFrom": [
-            "customer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["customer_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -699,12 +677,8 @@
           "name": "cases_parent_case_id_cases_id_fk",
           "tableFrom": "cases",
           "tableTo": "cases",
-          "columnsFrom": [
-            "parent_case_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["parent_case_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -712,12 +686,8 @@
           "name": "cases_batch_id_batches_id_fk",
           "tableFrom": "cases",
           "tableTo": "batches",
-          "columnsFrom": [
-            "batch_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["batch_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -798,9 +768,7 @@
         "customers_paypal_payer_ref_unique": {
           "name": "customers_paypal_payer_ref_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "paypal_payer_ref"
-          ]
+          "columns": ["paypal_payer_ref"]
         }
       },
       "policies": {},
@@ -932,12 +900,8 @@
           "name": "events_case_id_cases_id_fk",
           "tableFrom": "events",
           "tableTo": "cases",
-          "columnsFrom": [
-            "case_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["case_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -947,9 +911,7 @@
         "events_paypal_event_id_unique": {
           "name": "events_paypal_event_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "paypal_event_id"
-          ]
+          "columns": ["paypal_event_id"]
         }
       },
       "policies": {},
@@ -1064,12 +1026,8 @@
           "name": "jobs_case_id_cases_id_fk",
           "tableFrom": "jobs",
           "tableTo": "cases",
-          "columnsFrom": [
-            "case_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["case_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1316,12 +1274,8 @@
           "name": "sim_case_results_run_id_sim_runs_id_fk",
           "tableFrom": "sim_case_results",
           "tableTo": "sim_runs",
-          "columnsFrom": [
-            "run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["run_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1329,12 +1283,8 @@
           "name": "sim_case_results_case_id_cases_id_fk",
           "tableFrom": "sim_case_results",
           "tableTo": "cases",
-          "columnsFrom": [
-            "case_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["case_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1342,10 +1292,7 @@
       "compositePrimaryKeys": {
         "sim_case_results_run_id_case_id_pk": {
           "name": "sim_case_results_run_id_case_id_pk",
-          "columns": [
-            "run_id",
-            "case_id"
-          ]
+          "columns": ["run_id", "case_id"]
         }
       },
       "uniqueConstraints": {},
@@ -1400,12 +1347,8 @@
           "name": "sim_profiles_case_id_cases_id_fk",
           "tableFrom": "sim_profiles",
           "tableTo": "cases",
-          "columnsFrom": [
-            "case_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["case_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1413,12 +1356,8 @@
           "name": "sim_profiles_batch_id_batches_id_fk",
           "tableFrom": "sim_profiles",
           "tableTo": "batches",
-          "columnsFrom": [
-            "batch_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["batch_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1497,12 +1436,8 @@
           "name": "sim_runs_batch_id_batches_id_fk",
           "tableFrom": "sim_runs",
           "tableTo": "batches",
-          "columnsFrom": [
-            "batch_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["batch_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1558,25 +1493,12 @@
     "public.action_status": {
       "name": "action_status",
       "schema": "public",
-      "values": [
-        "proposed",
-        "held",
-        "blocked",
-        "approved",
-        "executed",
-        "failed",
-        "cancelled"
-      ]
+      "values": ["proposed", "held", "blocked", "approved", "executed", "failed", "cancelled"]
     },
     "public.approval_status": {
       "name": "approval_status",
       "schema": "public",
-      "values": [
-        "pending",
-        "approved",
-        "edited",
-        "rejected"
-      ]
+      "values": ["pending", "approved", "edited", "rejected"]
     },
     "public.case_state": {
       "name": "case_state",
@@ -1596,55 +1518,32 @@
     "public.experiment_group": {
       "name": "experiment_group",
       "schema": "public",
-      "values": [
-        "control",
-        "treatment"
-      ]
+      "values": ["control", "treatment"]
     },
     "public.gate_verdict": {
       "name": "gate_verdict",
       "schema": "public",
-      "values": [
-        "allow",
-        "hold",
-        "block"
-      ]
+      "values": ["allow", "hold", "block"]
     },
     "public.job_status": {
       "name": "job_status",
       "schema": "public",
-      "values": [
-        "pending",
-        "running",
-        "done",
-        "cancelled",
-        "failed"
-      ]
+      "values": ["pending", "running", "done", "cancelled", "failed"]
     },
     "public.lane": {
       "name": "lane",
       "schema": "public",
-      "values": [
-        "invoice",
-        "subscription"
-      ]
+      "values": ["invoice", "subscription"]
     },
     "public.paypal_call_status": {
       "name": "paypal_call_status",
       "schema": "public",
-      "values": [
-        "pending",
-        "succeeded",
-        "failed"
-      ]
+      "values": ["pending", "succeeded", "failed"]
     },
     "public.policy_mode": {
       "name": "policy_mode",
       "schema": "public",
-      "values": [
-        "dry_run",
-        "live"
-      ]
+      "values": ["dry_run", "live"]
     }
   },
   "schemas": {},

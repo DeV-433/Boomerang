@@ -114,6 +114,28 @@ function Results({ r, stale }: { r: WhatIfResponse; stale: boolean }) {
       count(r.scenario.disputes),
       signed(r.scenario.disputes - r.base.disputes),
     ],
+    ...(r.overrides.payPage
+      ? ([
+          [
+            "Used the pay page",
+            count(r.base.payPageUses),
+            count(r.scenario.payPageUses),
+            signed(r.scenario.payPageUses - r.base.payPageUses),
+          ],
+          [
+            "  paid on the page",
+            count(r.base.payPagePayments),
+            count(r.scenario.payPagePayments),
+            signed(r.scenario.payPagePayments - r.base.payPagePayments),
+          ],
+          [
+            "  promised on the page",
+            count(r.base.payPagePromises),
+            count(r.scenario.payPagePromises),
+            signed(r.scenario.payPagePromises - r.base.payPagePromises),
+          ],
+        ] as [string, string, string, string][])
+      : []),
   ];
   return (
     <section className={`card${stale ? " stale" : ""}`} aria-busy={stale}>
@@ -359,6 +381,20 @@ export function WhatIf() {
               </label>
             ))}
           </fieldset>
+          <label className="check toggle">
+            <input
+              type="checkbox"
+              checked={settings.payPage}
+              onChange={(e) => set({ payPage: e.target.checked })}
+            />
+            Reminders carry the self-serve pay page
+          </label>
+          {settings.payPage && (
+            <p className="small muted">
+              Assumed use rates by customer type are in the simulator config (sim/config/simulator.json,
+              payPage).
+            </p>
+          )}
 
           <div className="save">
             <h3>Save this scenario</h3>

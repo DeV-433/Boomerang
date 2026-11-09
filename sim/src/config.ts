@@ -55,6 +55,18 @@ export const SimConfigSchema = z
     fatigue: z.object({ perPriorContact: probability, optOutIncreasePerPriorContact: probability }),
     payDelayDays: range,
     promise: z.object({ inDays: range, keepProbability: byType(probability) }),
+    /**
+     * 7C.7: the self-serve pay page. A customer who would have ignored a Boomerang reminder sometimes
+     * opens its link instead: some pay there and then, the rest promise a date (kept at their type's
+     * usual promise-keeping rate). Optional, so batches stored before 7C replay unchanged.
+     */
+    payPage: z
+      .object({
+        useProbability: byType(probability),
+        payShare: byType(probability),
+        promiseInDays: range,
+      })
+      .optional(),
     dailySelfPay: byType(probability),
     paypalRetry: z.object({
       intervalDays: z.number().int().positive(),

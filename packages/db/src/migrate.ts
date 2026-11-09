@@ -12,7 +12,10 @@ const MIGRATION_LOCK_ID = 727_001;
 export async function runMigrations(databaseUrl: string): Promise<void> {
   const host = new URL(databaseUrl).hostname;
   const local = host === "localhost" || host === "127.0.0.1" || !host.includes(".");
-  const client = new pg.Client({ connectionString: databaseUrl, ssl: local ? undefined : { rejectUnauthorized: false } });
+  const client = new pg.Client({
+    connectionString: databaseUrl,
+    ssl: local ? undefined : { rejectUnauthorized: false },
+  });
   await client.connect();
   try {
     await client.query("select pg_advisory_lock($1)", [MIGRATION_LOCK_ID]);

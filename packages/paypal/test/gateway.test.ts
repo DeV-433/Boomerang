@@ -33,23 +33,40 @@ describe("invoice wrappers through the real toolkit (2.4 to 2.7)", () => {
 
   it("follows pages until the last one", async () => {
     const { gateway } = makeGateway();
-    const page = (n: number) => ({ items: Array.from({ length: 2 }, (_, i) => ({ id: `INV2-${n}-${i}` })), total_pages: 2 });
+    const page = (n: number) => ({
+      items: Array.from({ length: 2 }, (_, i) => ({ id: `INV2-${n}-${i}` })),
+      total_pages: 2,
+    });
     paypal.script("GET /v2/invoicing/invoices", HttpResponse.json(page(1)), HttpResponse.json(page(2)));
-    expect((await listAllInvoices(gateway, 2)).map((i) => i.id)).toEqual(["INV2-1-0", "INV2-1-1", "INV2-2-0", "INV2-2-1"]);
+    expect((await listAllInvoices(gateway, 2)).map((i) => i.id)).toEqual([
+      "INV2-1-0",
+      "INV2-1-1",
+      "INV2-2-0",
+      "INV2-2-1",
+    ]);
   });
 
   it("rejects arguments that fail the toolkit's own schema before calling PayPal", async () => {
     const { gateway } = makeGateway();
-    await expect(gateway.callTool("invoice", "get_invoice", { invoice_id: 42 })).rejects.toThrow(InvalidToolArgumentsError);
+    await expect(gateway.callTool("invoice", "get_invoice", { invoice_id: 42 })).rejects.toThrow(
+      InvalidToolArgumentsError,
+    );
     await expect(
-      gateway.callTool("invoice", "record_payment_for_invoice", { invoice_id: INVOICE_ID, method: "BITCOIN" }),
+      gateway.callTool("invoice", "record_payment_for_invoice", {
+        invoice_id: INVOICE_ID,
+        method: "BITCOIN",
+      }),
     ).rejects.toThrow(InvalidToolArgumentsError);
     expect(paypal.requests.filter((r) => !r.path.endsWith("/token"))).toHaveLength(0);
   });
 
   it("sends a reminder with the idempotency key as PayPal-Request-Id", async () => {
     const { gateway } = makeGateway();
-    const result = await sendInvoiceReminder(gateway, { invoiceId: INVOICE_ID, note: "Friendly nudge" }, "case-1:send_reminder:1");
+    const result = await sendInvoiceReminder(
+      gateway,
+      { invoiceId: INVOICE_ID, note: "Friendly nudge" },
+      "case-1:send_reminder:1",
+    );
     expect(result.replayed).toBe(false);
     const [call] = paypal.callsTo("POST", "/remind");
     expect(call?.path).toBe(`/v2/invoicing/invoices/${INVOICE_ID}/remind`);
@@ -73,14 +90,21 @@ describe("invoice wrappers through the real toolkit (2.4 to 2.7)", () => {
     const store = new MemoryIdempotencyStore();
     await store.claim({ key: "busy", tool: "send_invoice_reminder", profile: "invoice", request: {} });
     const { gateway } = makeGateway({ idempotency: store });
-    await expect(sendInvoiceReminder(gateway, { invoiceId: INVOICE_ID }, "busy")).rejects.toThrow(IdempotencyInFlightError);
+    await expect(sendInvoiceReminder(gateway, { invoiceId: INVOICE_ID }, "busy")).rejects.toThrow(
+      IdempotencyInFlightError,
+    );
     expect(paypal.callsTo("POST", "/remind")).toHaveLength(0);
   });
 
   it("lets a failed call be retried later with the same key", async () => {
     const { gateway } = makeGateway();
-    paypal.script(`POST /v2/invoicing/invoices/${INVOICE_ID}/remind`, HttpResponse.json({ name: "UNPROCESSABLE_ENTITY" }, { status: 422 }));
-    await expect(sendInvoiceReminder(gateway, { invoiceId: INVOICE_ID }, "case-3")).rejects.toMatchObject({ status: 422 });
+    paypal.script(
+      `POST /v2/invoicing/invoices/${INVOICE_ID}/remind`,
+      HttpResponse.json({ name: "UNPROCESSABLE_ENTITY" }, { status: 422 }),
+    );
+    await expect(sendInvoiceReminder(gateway, { invoiceId: INVOICE_ID }, "case-3")).rejects.toMatchObject({
+      status: 422,
+    });
     const retry = await sendInvoiceReminder(gateway, { invoiceId: INVOICE_ID }, "case-3");
     expect(retry.replayed).toBe(false);
     expect(paypal.callsTo("POST", "/remind")).toHaveLength(2);
@@ -89,14 +113,21 @@ describe("invoice wrappers through the real toolkit (2.4 to 2.7)", () => {
   it("cancels PayPal's automatic reminders for an invoice", async () => {
     const { gateway } = makeGateway();
     await cancelInvoiceAutoReminder(gateway, INVOICE_ID, "case-4:cancel_auto_reminder");
-    expect(paypal.callsTo("POST", "/cancel-reminders")[0]?.path).toBe(`/v2/invoicing/invoices/${INVOICE_ID}/cancel-reminders`);
+    expect(paypal.callsTo("POST", "/cancel-reminders")[0]?.path).toBe(
+      `/v2/invoicing/invoices/${INVOICE_ID}/cancel-reminders`,
+    );
   });
 
   it("records a payment with amount, method and date", async () => {
     const { gateway } = makeGateway();
     const result = await recordPaymentForInvoice(
       gateway,
-      { invoiceId: INVOICE_ID, amount: { currencyCode: "USD", value: "12.50" }, method: "PAYPAL", paymentDate: "2026-11-09" },
+      {
+        invoiceId: INVOICE_ID,
+        amount: { currencyCode: "USD", value: "12.50" },
+        method: "PAYPAL",
+        paymentDate: "2026-11-09",
+      },
       "case-5:sim_pay",
     );
     expect(result.data).toMatchObject({ payment_id: "EXTR-1" });
@@ -122,7 +153,11 @@ describe("subscription wrappers (2.8, 2.9)", () => {
 
   it("captures an outstanding balance by direct REST call, idempotently", async () => {
     const { gateway } = makeGateway();
-    const input = { subscriptionId: SUBSCRIPTION_ID, amount: { currencyCode: "USD", value: "15.00" }, note: "Balance" };
+    const input = {
+      subscriptionId: SUBSCRIPTION_ID,
+      amount: { currencyCode: "USD", value: "15.00" },
+      note: "Balance",
+    };
     await captureSubscriptionBalance(gateway, input, "case-6:capture");
     await captureSubscriptionBalance(gateway, input, "case-6:capture");
     const calls = paypal.callsTo("POST", "/capture");
@@ -136,9 +171,9 @@ describe("subscription wrappers (2.8, 2.9)", () => {
 
   it("refuses balance capture from the invoice lane", async () => {
     const { gateway } = makeGateway();
-    await expect(gateway.callRest("invoice", "capture_subscription_balance", { method: "POST", path: "/x" })).rejects.toThrow(
-      ToolNotAllowedError,
-    );
+    await expect(
+      gateway.callRest("invoice", "capture_subscription_balance", { method: "POST", path: "/x" }),
+    ).rejects.toThrow(ToolNotAllowedError);
   });
 });
 
@@ -176,7 +211,8 @@ describe("error handling (2.11)", () => {
   it("retries 5xx and keeps the full error body and debug id when it finally fails", async () => {
     const { gateway } = makeGateway();
     const longBody = { name: "INTERNAL_SERVER_ERROR", message: "x".repeat(500), debug_id: "abc" };
-    const failure = () => HttpResponse.json(longBody, { status: 503, headers: { "paypal-debug-id": "dbg-503" } });
+    const failure = () =>
+      HttpResponse.json(longBody, { status: 503, headers: { "paypal-debug-id": "dbg-503" } });
     paypal.script(`GET /v2/invoicing/invoices/${INVOICE_ID}`, failure(), failure(), failure(), failure());
     const error = await getInvoice(gateway, INVOICE_ID).catch((e: unknown) => e);
     expect(error).toMatchObject({ status: 503, debugId: "dbg-503", errorName: "INTERNAL_SERVER_ERROR" });
@@ -186,14 +222,20 @@ describe("error handling (2.11)", () => {
 
   it("does not retry client errors", async () => {
     const { gateway } = makeGateway();
-    paypal.script(`GET /v2/invoicing/invoices/${INVOICE_ID}`, HttpResponse.json({ name: "RESOURCE_NOT_FOUND" }, { status: 404 }));
+    paypal.script(
+      `GET /v2/invoicing/invoices/${INVOICE_ID}`,
+      HttpResponse.json({ name: "RESOURCE_NOT_FOUND" }, { status: 404 }),
+    );
     await expect(getInvoice(gateway, INVOICE_ID)).rejects.toMatchObject({ status: 404 });
     expect(paypal.callsTo("GET", `/invoices/${INVOICE_ID}`)).toHaveLength(1);
   });
 
   it("refreshes the token and retries once when PayPal rejects it with 401", async () => {
     const { gateway } = makeGateway();
-    paypal.script(`GET /v2/invoicing/invoices/${INVOICE_ID}`, HttpResponse.json({ name: "AUTHENTICATION_FAILURE" }, { status: 401 }));
+    paypal.script(
+      `GET /v2/invoicing/invoices/${INVOICE_ID}`,
+      HttpResponse.json({ name: "AUTHENTICATION_FAILURE" }, { status: 401 }),
+    );
     await expect(getInvoice(gateway, INVOICE_ID)).resolves.toMatchObject({ id: INVOICE_ID });
     const auths = paypal.callsTo("GET", `/invoices/${INVOICE_ID}`).map((r) => r.headers.authorization);
     expect(auths).toEqual(["Bearer token-1", "Bearer token-2"]);

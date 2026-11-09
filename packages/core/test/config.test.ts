@@ -25,7 +25,11 @@ describe("loadConfig", () => {
 
 describe("groqKeys", () => {
   it("puts GROQ_API_KEY first, then the extra keys, without blanks or repeats", () => {
-    expect(groqKeys(loadConfig({ GROQ_API_KEY: "main", GROQ_API_KEYS: "a, b,,main,a" }))).toEqual(["main", "a", "b"]);
+    expect(groqKeys(loadConfig({ GROQ_API_KEY: "main", GROQ_API_KEYS: "a, b,,main,a" }))).toEqual([
+      "main",
+      "a",
+      "b",
+    ]);
     expect(groqKeys(loadConfig({ GROQ_API_KEY: "main" }))).toEqual(["main"]);
     expect(() => groqKeys(loadConfig({}))).toThrow(/GROQ_API_KEY/);
   });

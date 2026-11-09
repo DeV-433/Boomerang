@@ -52,34 +52,54 @@ export function fakePayPal() {
   const server = setupServer(
     http.post(`${BASE}/v1/oauth2/token`, async ({ request }) => {
       await record(request);
-      return next("POST /v1/oauth2/token") ?? HttpResponse.json({ access_token: `token-${++tokenCounter}`, expires_in: 32400 });
+      return (
+        next("POST /v1/oauth2/token") ??
+        HttpResponse.json({ access_token: `token-${++tokenCounter}`, expires_in: 32400 })
+      );
     }),
-    ...HOSTS.map((host) => http.all(`${host}/*`, async ({ request }) => {
-      const r = await record(request);
-      const scriptedResponse = next(`${r.method} ${r.path}`);
-      if (scriptedResponse) return scriptedResponse;
-      if (r.headers.authorization === "Bearer revoked") {
-        return HttpResponse.json({ name: "AUTHENTICATION_FAILURE" }, { status: 401 });
-      }
-      if (r.method === "GET" && r.path === "/v2/invoicing/invoices") {
-        return HttpResponse.json({ items: [{ id: INVOICE_ID, status: "SENT" }], total_items: 1, total_pages: 1 });
-      }
-      if (r.method === "GET" && r.path.startsWith("/v2/invoicing/invoices/")) {
-        return HttpResponse.json({ id: r.path.split("/").pop(), status: "SENT", detail: { currency_code: "USD" } });
-      }
-      if (r.method === "POST" && /\/(remind|cancel-reminders)$/.test(r.path)) return new HttpResponse(null, { status: 204 });
-      if (r.method === "POST" && r.path.endsWith("/generate-qr-code")) return HttpResponse.text("iVBORw0KGgo=");
-      if (r.method === "POST" && r.path.endsWith("/payments")) return HttpResponse.json({ payment_id: "EXTR-1" });
-      if (r.method === "GET" && r.path.startsWith("/v1/billing/subscriptions/")) {
-        return HttpResponse.json({
-          id: SUBSCRIPTION_ID,
-          status: "ACTIVE",
-          billing_info: { failed_payments_count: 2, outstanding_balance: { currency_code: "USD", value: "15.00" } },
-        });
-      }
-      if (r.method === "POST" && r.path.endsWith("/capture")) return HttpResponse.json({ id: "CAP-1", status: "COMPLETED" });
-      return HttpResponse.json({ name: "RESOURCE_NOT_FOUND", path: r.path }, { status: 404 });
-    })),
+    ...HOSTS.map((host) =>
+      http.all(`${host}/*`, async ({ request }) => {
+        const r = await record(request);
+        const scriptedResponse = next(`${r.method} ${r.path}`);
+        if (scriptedResponse) return scriptedResponse;
+        if (r.headers.authorization === "Bearer revoked") {
+          return HttpResponse.json({ name: "AUTHENTICATION_FAILURE" }, { status: 401 });
+        }
+        if (r.method === "GET" && r.path === "/v2/invoicing/invoices") {
+          return HttpResponse.json({
+            items: [{ id: INVOICE_ID, status: "SENT" }],
+            total_items: 1,
+            total_pages: 1,
+          });
+        }
+        if (r.method === "GET" && r.path.startsWith("/v2/invoicing/invoices/")) {
+          return HttpResponse.json({
+            id: r.path.split("/").pop(),
+            status: "SENT",
+            detail: { currency_code: "USD" },
+          });
+        }
+        if (r.method === "POST" && /\/(remind|cancel-reminders)$/.test(r.path))
+          return new HttpResponse(null, { status: 204 });
+        if (r.method === "POST" && r.path.endsWith("/generate-qr-code"))
+          return HttpResponse.text("iVBORw0KGgo=");
+        if (r.method === "POST" && r.path.endsWith("/payments"))
+          return HttpResponse.json({ payment_id: "EXTR-1" });
+        if (r.method === "GET" && r.path.startsWith("/v1/billing/subscriptions/")) {
+          return HttpResponse.json({
+            id: SUBSCRIPTION_ID,
+            status: "ACTIVE",
+            billing_info: {
+              failed_payments_count: 2,
+              outstanding_balance: { currency_code: "USD", value: "15.00" },
+            },
+          });
+        }
+        if (r.method === "POST" && r.path.endsWith("/capture"))
+          return HttpResponse.json({ id: "CAP-1", status: "COMPLETED" });
+        return HttpResponse.json({ name: "RESOURCE_NOT_FOUND", path: r.path }, { status: 404 });
+      }),
+    ),
     // Anything else must never leave the machine: answer it here and remember it, so tests can fail.
     http.all("*", ({ request }) => {
       unexpected.push(`${request.method} ${request.url}`);

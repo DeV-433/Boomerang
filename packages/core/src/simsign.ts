@@ -8,7 +8,11 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 export const SIM_SIGNATURE_HEADER = "boomerang-sim-signature";
 export const SIM_SIGNATURE_TOLERANCE_SECONDS = 300;
 
-export function signSimulatedEvent(secret: string, rawBody: string, timestampSeconds: number = Math.floor(Date.now() / 1000)): string {
+export function signSimulatedEvent(
+  secret: string,
+  rawBody: string,
+  timestampSeconds: number = Math.floor(Date.now() / 1000),
+): string {
   const mac = createHmac("sha256", secret).update(`${timestampSeconds}.${rawBody}`).digest("hex");
   return `t=${timestampSeconds},v1=${mac}`;
 }
@@ -25,9 +29,11 @@ export function verifySimulatedEvent(
   const parts = Object.fromEntries(header.split(",").map((p) => p.split("=", 2) as [string, string]));
   const t = Number(parts.t);
   if (!Number.isInteger(t) || !parts.v1) return { ok: false, reason: "malformed signature" };
-  if (Math.abs(nowSeconds - t) > SIM_SIGNATURE_TOLERANCE_SECONDS) return { ok: false, reason: "timestamp outside tolerance" };
+  if (Math.abs(nowSeconds - t) > SIM_SIGNATURE_TOLERANCE_SECONDS)
+    return { ok: false, reason: "timestamp outside tolerance" };
   const expected = createHmac("sha256", secret).update(`${t}.${rawBody}`).digest();
   const given = Buffer.from(parts.v1, "hex");
-  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return { ok: false, reason: "signature mismatch" };
+  if (given.length !== expected.length || !timingSafeEqual(given, expected))
+    return { ok: false, reason: "signature mismatch" };
   return { ok: true };
 }

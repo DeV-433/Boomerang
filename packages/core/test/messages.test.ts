@@ -11,16 +11,24 @@ const facts: MessageFacts = {
 };
 const TONES: Tone[] = ["friendly", "neutral", "firm"];
 /** A message built from the template with the given personal note (what the drafting call returns). */
-const withNote = (note: string, template: (typeof TEMPLATE_IDS)[number] = "reminder", tone: Tone = "neutral") => renderTemplate(template, facts, tone, note).body;
+const withNote = (
+  note: string,
+  template: (typeof TEMPLATE_IDS)[number] = "reminder",
+  tone: Tone = "neutral",
+) => renderTemplate(template, facts, tone, note).body;
 
 describe("message templates (5.6)", () => {
-  it.each(TEMPLATE_IDS.flatMap((t) => TONES.map((tone) => [t, tone] as const)))("%s / %s renders with every required field and passes lint", (template, tone) => {
-    const m = renderTemplate(template, facts, tone);
-    for (const required of [facts.amount, facts.reference, facts.link, OPT_OUT_LINE]) expect(m.body).toContain(required);
-    expect(m.subject.length).toBeGreaterThan(5);
-    expect(m.tone).toBe(tone);
-    expect(lintMessage(m.body, facts)).toEqual({ ok: true, issues: [] });
-  });
+  it.each(TEMPLATE_IDS.flatMap((t) => TONES.map((tone) => [t, tone] as const)))(
+    "%s / %s renders with every required field and passes lint",
+    (template, tone) => {
+      const m = renderTemplate(template, facts, tone);
+      for (const required of [facts.amount, facts.reference, facts.link, OPT_OUT_LINE])
+        expect(m.body).toContain(required);
+      expect(m.subject.length).toBeGreaterThan(5);
+      expect(m.tone).toBe(tone);
+      expect(lintMessage(m.body, facts)).toEqual({ ok: true, issues: [] });
+    },
+  );
 
   it("tone changes the wording by stage", () => {
     const bodies = TONES.map((tone) => renderTemplate("reminder", facts, tone).body);
@@ -33,7 +41,9 @@ describe("message templates (5.6)", () => {
   });
 
   it("greets without a name when the name is unknown", () => {
-    expect(renderTemplate("reminder", { ...facts, customerName: null }, "friendly").body.startsWith("Hello,")).toBe(true);
+    expect(
+      renderTemplate("reminder", { ...facts, customerName: null }, "friendly").body.startsWith("Hello,"),
+    ).toBe(true);
   });
 });
 
@@ -63,10 +73,17 @@ describe("message lint (5.8)", () => {
     withNote("If you have already paid, thank you, and please ignore this message."),
     withNote("If anything about this invoice looks wrong, just reply and we will look into it."),
     withNote("Thanks for being a customer. Let us know if you need a copy of the invoice."),
-    withNote("You told us you would pay by 2026-11-14, and we appreciate you letting us know.", "promise_follow_up"),
+    withNote(
+      "You told us you would pay by 2026-11-14, and we appreciate you letting us know.",
+      "promise_follow_up",
+    ),
     withNote("We are happy to talk through a schedule that works for you.", "payment_plan"),
     withNote("Updating your card takes about a minute.", "update_payment_method", "friendly"),
-    withNote("We have reached out a couple of times and want to make sure this reached you.", "reminder", "firm"),
+    withNote(
+      "We have reached out a couple of times and want to make sure this reached you.",
+      "reminder",
+      "firm",
+    ),
     withNote("If paying in parts would help, reply with what works for you.", "payment_plan", "firm"),
     renderTemplate("reminder", facts, "friendly").body,
   ];
@@ -84,13 +101,23 @@ describe("message lint (5.8)", () => {
   });
 
   it("explains each rejection", () => {
-    expect(lintMessage(withNote("Pay $1,000.00 within 48 hours or face legal action."), facts).issues).toEqual(
-      expect.arrayContaining(['invents an amount: "$1,000.00"', "sets a deadline that is not in the case data", "threatens legal action"]),
+    expect(
+      lintMessage(withNote("Pay $1,000.00 within 48 hours or face legal action."), facts).issues,
+    ).toEqual(
+      expect.arrayContaining([
+        'invents an amount: "$1,000.00"',
+        "sets a deadline that is not in the case data",
+        "threatens legal action",
+      ]),
     );
   });
 
   it("accepts the promised date written as a month and day", () => {
-    expect(lintMessage(withNote("Thanks for planning to pay by Nov 14.", "promise_follow_up"), facts).ok).toBe(true);
-    expect(lintMessage(withNote("Thanks for planning to pay by Nov 20.", "promise_follow_up"), facts).ok).toBe(false);
+    expect(
+      lintMessage(withNote("Thanks for planning to pay by Nov 14.", "promise_follow_up"), facts).ok,
+    ).toBe(true);
+    expect(
+      lintMessage(withNote("Thanks for planning to pay by Nov 20.", "promise_follow_up"), facts).ok,
+    ).toBe(false);
   });
 });

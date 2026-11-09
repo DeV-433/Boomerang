@@ -6,6 +6,7 @@ import type { ModelClient } from "@boomerang/agent";
 import type { PayPalGateway, WebhookVerifier } from "@boomerang/paypal";
 import { healthRoutes } from "./routes/health";
 import { operatorRoutes } from "./routes/operator";
+import { payPageRoutes } from "./routes/paypage";
 import { webhookRoutes } from "./routes/webhooks";
 
 export interface AppDeps {
@@ -22,6 +23,10 @@ export interface AppDeps {
   gateway?: PayPalGateway;
   /** The reply classifier and decision model, for live attack runs on the trust panel (7B.6). */
   model?: ModelClient;
+  /** Signs and checks pay-page links (7C). Unset: the pay page answers 503. */
+  payLinkSecret?: string;
+  /** Shown on the pay page. */
+  merchantName?: string;
   /** Clock for decisions (tests pin it; production uses the real time). */
   now?: () => Date;
   /** POLICY_MODE, reported to the dashboard. */
@@ -43,6 +48,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({
     loggerInstance: deps.logger as FastifyBaseLogger | undefined,
     trustProxy: true, // Render terminates TLS in front of the service.
+    // Signed pay-page tokens (7C.1) are ~130 characters; verifyPayLink caps them at 512.
+    routerOptions: { maxParamLength: 512 },
   });
 
   await app.register(cors, {
@@ -55,6 +62,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // Encapsulated so its raw-body JSON parser does not affect the dashboard API.
   await app.register(webhookRoutes, deps);
   await app.register(operatorRoutes, { ...deps, prefix: "/api" });
+  // Public: the customer's pay-or-promise page (7C). Encapsulated, with its own rate limits and form parser.
+  await app.register(payPageRoutes, deps);
 
   return app;
 }

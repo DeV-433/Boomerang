@@ -81,6 +81,7 @@ const ROWS: { label: string; get: (m: SimArmMetrics) => string }[] = [
   { label: "Contacts after opt-out", get: (m) => count(m.contactsAfterOptOut) },
   { label: "Disputes", get: (m) => count(m.disputes) },
   { label: "Escalated to a person", get: (m) => (m.escalated === undefined ? "n/a" : count(m.escalated)) },
+  { label: "Used the pay page", get: (m) => (m.payPageUses === undefined ? "n/a" : count(m.payPageUses)) },
 ];
 
 export function Summary() {

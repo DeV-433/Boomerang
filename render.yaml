@@ -58,8 +58,14 @@ services:
       # Shared secret the operator types into the dashboard; every /api route requires it.
       - key: OPERATOR_TOKEN
         sync: false
+      # Signs pay-page links (7C.1). The worker needs the SAME value.
       - key: PAY_LINK_SECRET
         sync: false
+      # Public address used in pay-page links (7C.6) and the merchant name the page shows (7C.2).
+      - key: PUBLIC_BASE_URL
+        value: https://boomerang-api-rgd8.onrender.com
+      - key: MERCHANT_NAME
+        value: Boomerang Demo Store
       - key: SIM_WEBHOOK_SECRET
         sync: false
 
@@ -96,6 +102,11 @@ services:
       # Optional client-side cap per model; Groq's rate-limit headers pace calls either way.
       - key: GROQ_RPM
         value: "25"
+      # Reminders link to the signed pay page (7C.6): same PAY_LINK_SECRET as the API.
+      - key: PAY_LINK_SECRET
+        sync: false
+      - key: PUBLIC_BASE_URL
+        value: https://boomerang-api-rgd8.onrender.com
 
   # Operator dashboard (React + Vite, step 6.1). Talks to the API over HTTPS with the operator token.
   - type: web

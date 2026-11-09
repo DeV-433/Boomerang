@@ -59,7 +59,8 @@ export class MemoryIdempotencyStore implements IdempotencyStore {
     }
     if (row.tool !== tool) throw new IdempotencyConflictError(key);
     if (row.status === "succeeded") return { kind: "done", response: row.response };
-    if (row.status === "pending" && this.now() - row.claimedAt < CLAIM_LEASE_MS) throw new IdempotencyInFlightError(key);
+    if (row.status === "pending" && this.now() - row.claimedAt < CLAIM_LEASE_MS)
+      throw new IdempotencyInFlightError(key);
     row.status = "pending";
     row.attempts += 1;
     row.claimedAt = this.now();
@@ -79,8 +80,20 @@ export class MemoryIdempotencyStore implements IdempotencyStore {
 
 function serializeError(error: unknown): unknown {
   if (error && typeof error === "object") {
-    const e = error as { name?: string; message?: string; status?: number | null; body?: string; debugId?: string | null };
-    return { name: e.name, message: e.message, status: e.status ?? null, body: e.body, debugId: e.debugId ?? null };
+    const e = error as {
+      name?: string;
+      message?: string;
+      status?: number | null;
+      body?: string;
+      debugId?: string | null;
+    };
+    return {
+      name: e.name,
+      message: e.message,
+      status: e.status ?? null,
+      body: e.body,
+      debugId: e.debugId ?? null,
+    };
   }
   return { message: String(error) };
 }
@@ -112,7 +125,10 @@ export class PgIdempotencyStore implements IdempotencyStore {
         and(
           eq(paypalCalls.idempotencyKey, key),
           eq(paypalCalls.tool, tool),
-          or(eq(paypalCalls.status, "failed"), and(eq(paypalCalls.status, "pending"), lt(paypalCalls.claimedAt, lease))),
+          or(
+            eq(paypalCalls.status, "failed"),
+            and(eq(paypalCalls.status, "pending"), lt(paypalCalls.claimedAt, lease)),
+          ),
         ),
       )
       .returning({ attempts: paypalCalls.attempts });

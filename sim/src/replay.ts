@@ -5,7 +5,7 @@ import { proposeByRules, type Proposer } from "@boomerang/cases";
 import { canonicalJson, simCaseResults, simRuns, type Database } from "@boomerang/db";
 import { DEFAULT_POLICY, type Policy } from "@boomerang/policy";
 import { pairedBootstrap, type Interval } from "./bootstrap";
-import { parseSimConfig, type SimConfig } from "./config";
+import { loadSimConfig, parseSimConfig, type SimConfig } from "./config";
 import { simulateArm, type CaseResult, type SimCase } from "./engine";
 import { computeMetrics, type ArmMetrics } from "./metrics";
 import { Rng } from "./rng";
@@ -62,6 +62,8 @@ export const PolicyOverridesSchema = z
     hoursStart: z.number().int().min(0).max(23),
     hoursEnd: z.number().int().min(1).max(24),
     contactDays: z.array(z.number().int().min(0).max(6)).min(1).max(7),
+    /** 7C.7: Boomerang's reminders carry the self-serve pay page. Not a policy setting, but a what-if all the same. */
+    payPage: z.boolean(),
   })
   .partial()
   .strict()
@@ -108,18 +110,29 @@ export interface ReplayResult {
   fingerprint: string;
 }
 
+/** Pay-page behaviour for batches stored before 7C (their config has none): the current simulator defaults. */
+let defaultPayPage: SimConfig["payPage"] | null = null;
+function withPayPage(config: SimConfig): SimConfig {
+  if (config.payPage) return config;
+  defaultPayPage ??= loadSimConfig().payPage ?? null;
+  if (!defaultPayPage) throw new Error("the simulator config has no payPage settings");
+  return { ...config, payPage: defaultPayPage };
+}
+
 export async function replay(
   input: ReplayInput,
-  options: { policy?: Policy; proposer?: Proposer; name?: string } = {},
+  options: { policy?: Policy; proposer?: Proposer; name?: string; payPage?: boolean } = {},
 ): Promise<ReplayResult> {
   const policy = options.policy ?? REPLAY_BASE_POLICY;
   const strategy = loopStrategy({
     name: options.name ?? "boomerang-replay",
     proposer: options.proposer ?? proposeByRules,
     policy,
+    payPage: options.payPage ?? false,
   });
+  const config = options.payPage ? withPayPage(input.config) : input.config;
   // A fresh Rng per replay: draws depend only on the seed and their keys, never on earlier draws.
-  const results = await simulateArm(input.config, new Rng(input.seed), input.cases, strategy);
+  const results = await simulateArm(config, new Rng(input.seed), input.cases, strategy);
   const metrics = {
     ...computeMetrics(results),
     escalated: strategy.stats.escalated,
@@ -267,6 +280,7 @@ export async function whatIf(
   const scenario = await replay(input, {
     policy: applyOverrides(basePolicy, parsed),
     name: "whatif-scenario",
+    payPage: parsed.payPage ?? false,
   });
   const boot = pairedBootstrap(
     base.results.map((r) => r.recoveredCents),

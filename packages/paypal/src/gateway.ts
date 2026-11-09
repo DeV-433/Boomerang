@@ -78,9 +78,15 @@ export class PayPalGateway {
   }
 
   /** Calls a whitelisted toolkit tool. Pass an idempotency key for anything that is not a read. */
-  async callTool<T = unknown>(profile: Profile, tool: string, args: unknown, opts: CallOptions = {}): Promise<CallResult<T>> {
+  async callTool<T = unknown>(
+    profile: Profile,
+    tool: string,
+    args: unknown,
+    opts: CallOptions = {},
+  ): Promise<CallResult<T>> {
     assertAllowed(profile, tool);
-    if (profile === "seeder" && !this.sandbox) throw new Error("The seeder profile is refused outside the sandbox");
+    if (profile === "seeder" && !this.sandbox)
+      throw new Error("The seeder profile is refused outside the sandbox");
     if (isRestOperation(tool)) throw new Error(`"${tool}" is a REST operation; use its wrapper`);
 
     const definition = toolRegistry().get(tool);
@@ -106,7 +112,8 @@ export class PayPalGateway {
     opts: CallOptions = {},
   ): Promise<CallResult<T>> {
     assertAllowed(profile, operation);
-    if (profile === "seeder" && !this.sandbox) throw new Error("The seeder profile is refused outside the sandbox");
+    if (profile === "seeder" && !this.sandbox)
+      throw new Error("The seeder profile is refused outside the sandbox");
     return this.idempotent(profile, operation, request, opts.idempotencyKey, (requestId) =>
       this.options.tokens.withToken(async (accessToken) => {
         const res = await this.fetchFn(`${this.options.tokens.baseUrl}${request.path}`, {
@@ -145,13 +152,19 @@ export class PayPalGateway {
 
     const claim = await this.options.idempotency.claim({ key, tool, profile, request });
     if (claim.kind === "done") {
-      this.options.logger?.info({ tool, profile, idempotencyKey: key }, "PayPal call skipped: already done for this key");
+      this.options.logger?.info(
+        { tool, profile, idempotencyKey: key },
+        "PayPal call skipped: already done for this key",
+      );
       return { data: claim.response, replayed: true, idempotencyKey: key };
     }
     try {
       const data = await attempt();
       await this.options.idempotency.complete(key, data);
-      this.options.logger?.info({ tool, profile, idempotencyKey: key, attempt: claim.attempt }, "PayPal call succeeded");
+      this.options.logger?.info(
+        { tool, profile, idempotencyKey: key, attempt: claim.attempt },
+        "PayPal call succeeded",
+      );
       return { data, replayed: false, idempotencyKey: key };
     } catch (error) {
       await this.options.idempotency.fail(key, error);
@@ -164,7 +177,13 @@ export class PayPalGateway {
   private logError(msg: string, error: unknown, extra: Record<string, unknown>): void {
     if (error instanceof PayPalHttpError) {
       this.options.logger?.warn(
-        { ...extra, status: error.status, debugId: error.debugId, paypalError: error.errorName, body: error.body },
+        {
+          ...extra,
+          status: error.status,
+          debugId: error.debugId,
+          paypalError: error.errorName,
+          body: error.body,
+        },
         msg,
       );
     } else {

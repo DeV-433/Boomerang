@@ -63,6 +63,7 @@ export async function whatIfRoutes(app: FastifyInstance, deps: AppDeps): Promise
       hoursStart: p.hours.start,
       hoursEnd: p.hours.end,
       contactDays: p.hours.days,
+      payPage: false,
     };
   });
 

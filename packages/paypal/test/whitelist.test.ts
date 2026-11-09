@@ -30,7 +30,8 @@ describe("tool whitelist (2.3)", () => {
   });
 
   it("gives the decision lanes no tool that refunds, cancels, deletes or accepts a dispute", () => {
-    const dangerous = /refund|cancel_sent|cancel_subscription|delete|accept_dispute|pay_order|update_subscription/;
+    const dangerous =
+      /refund|cancel_sent|cancel_subscription|delete|accept_dispute|pay_order|update_subscription/;
     for (const profile of ["invoice", "subscription"] as const) {
       for (const tool of TOOL_WHITELIST[profile]) expect(tool).not.toMatch(dangerous);
     }

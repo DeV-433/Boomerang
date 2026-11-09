@@ -9,7 +9,12 @@ import type { Tone } from "./domain";
  * code, so it cannot be argued with.
  */
 
-export const TEMPLATE_IDS = ["reminder", "payment_plan", "promise_follow_up", "update_payment_method"] as const;
+export const TEMPLATE_IDS = [
+  "reminder",
+  "payment_plan",
+  "promise_follow_up",
+  "update_payment_method",
+] as const;
 export type TemplateId = (typeof TEMPLATE_IDS)[number];
 
 export const OPT_OUT_LINE = "Reply STOP and we will not contact you about this again.";
@@ -42,10 +47,12 @@ const OPENERS: Record<Tone, string> = {
 };
 
 const CORE_LINES: Record<TemplateId, (f: MessageFacts, tone: Tone) => string> = {
-  reminder: (f, tone) => `${OPENERS[tone]} ${f.reference} for ${f.amount} is past due. You can pay it here: ${f.link}`,
+  reminder: (f, tone) =>
+    `${OPENERS[tone]} ${f.reference} for ${f.amount} is past due. You can pay it here: ${f.link}`,
   payment_plan: (f, tone) =>
     `${OPENERS[tone]} ${f.reference} for ${f.amount} is past due. If paying it at once is difficult, reply and we can split it into smaller payments. Pay here: ${f.link}`,
-  promise_follow_up: (f) => `You told us you would pay ${f.reference} for ${f.amount} by ${f.promiseDate}. We have not received it yet. You can pay here: ${f.link}`,
+  promise_follow_up: (f) =>
+    `You told us you would pay ${f.reference} for ${f.amount} by ${f.promiseDate}. We have not received it yet. You can pay here: ${f.link}`,
   update_payment_method: (f, tone) =>
     `${tone === "friendly" ? "" : `${OPENERS[tone]} `}We could not collect ${f.amount} for ${f.reference} because your payment method was declined. Please update it here: ${f.link}`,
 };
@@ -57,11 +64,24 @@ const SUBJECTS: Record<TemplateId, (f: MessageFacts) => string> = {
   update_payment_method: () => "Action needed: update your payment method",
 };
 
-export function renderTemplate(template: TemplateId, facts: MessageFacts, tone: Tone, personalNote?: string): RenderedMessage {
+export function renderTemplate(
+  template: TemplateId,
+  facts: MessageFacts,
+  tone: Tone,
+  personalNote?: string,
+): RenderedMessage {
   const greeting = facts.customerName ? `Hi ${facts.customerName},` : "Hello,";
   const note = personalNote?.trim();
-  const body = [greeting, CORE_LINES[template](facts, tone), ...(note ? [note] : []), OPT_OUT_LINE].join("\n\n");
-  return { tone, template, subject: SUBJECTS[template](facts), body, ...(note ? { personalNote: note } : {}) };
+  const body = [greeting, CORE_LINES[template](facts, tone), ...(note ? [note] : []), OPT_OUT_LINE].join(
+    "\n\n",
+  );
+  return {
+    tone,
+    template,
+    subject: SUBJECTS[template](facts),
+    body,
+    ...(note ? { personalNote: note } : {}),
+  };
 }
 
 // 5.8: message lint ------------------------------------------------------------------------------------
@@ -78,21 +98,34 @@ const FORBIDDEN: [RegExp, string][] = [
   [/\b(police|arrest|criminal|prosecut)/i, "threatens criminal consequences"],
   [/\b(credit (score|report|rating|bureau))\b/i, "threatens the customer's credit"],
   [/\b(garnish|seize|repossess)/i, "threatens seizure"],
-  [/\b(late fee|penalty|surcharge|interest (charge|rate)|additional fee|extra fee)\b/i, "mentions a fee not in the case data"],
-  [/\b(suspend|terminate|close|freeze)\s+(your\s+)?(account|access)\b/i, "threatens account action not in the case data"],
+  [
+    /\b(late fee|penalty|surcharge|interest (charge|rate)|additional fee|extra fee)\b/i,
+    "mentions a fee not in the case data",
+  ],
+  [
+    /\b(suspend|terminate|close|freeze)\s+(your\s+)?(account|access)\b/i,
+    "threatens account action not in the case data",
+  ],
   [/\b(last chance|act now|immediately or|failure to pay will)\b/i, "uses pressure or ultimatum language"],
   [/\b(stupid|idiot|irresponsible|shame|disgrace)/i, "insults the customer"],
 ];
 
 /** Deadline phrasing; a deadline is only allowed if it is the customer's own promised date. */
-const DEADLINE = /\b(within \d+\s*(hours?|days?|business days?)|by (end of|close of|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|eod|cob)|deadline|due by|no later than|before (monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b/i;
+const DEADLINE =
+  /\b(within \d+\s*(hours?|days?|business days?)|by (end of|close of|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|eod|cob)|deadline|due by|no later than|before (monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b/i;
 
-const MONEY = /(?:[$€£₹]\s?\d[\d,]*(?:\.\d{1,2})?|\b\d[\d,]*(?:\.\d{1,2})?\s?(?:USD|EUR|GBP|INR|dollars?)\b)/gi;
-const DATE = /\b\d{4}-\d{2}-\d{2}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:st|nd|rd|th)?\b/gi;
+const MONEY =
+  /(?:[$€£₹]\s?\d[\d,]*(?:\.\d{1,2})?|\b\d[\d,]*(?:\.\d{1,2})?\s?(?:USD|EUR|GBP|INR|dollars?)\b)/gi;
+const DATE =
+  /\b\d{4}-\d{2}-\d{2}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:st|nd|rd|th)?\b/gi;
 const URL = /https?:\/\/[^\s)]+/gi;
 const PERCENT = /\b\d+(?:\.\d+)?\s?%/;
 
-const normalizeMoney = (s: string) => s.replace(/[^\d.]/g, "").replace(/\.0+$/, "").replace(/^0+(?=\d)/, "");
+const normalizeMoney = (s: string) =>
+  s
+    .replace(/[^\d.]/g, "")
+    .replace(/\.0+$/, "")
+    .replace(/^0+(?=\d)/, "");
 
 /**
  * Rejects drafts that miss a required fact, invent one (another amount, link, percentage or date),
@@ -110,11 +143,14 @@ export function lintMessage(body: string, facts: MessageFacts): LintResult {
     if (normalizeMoney(m) !== allowedMoney) issues.push(`invents an amount: "${m.trim()}"`);
   }
   for (const u of body.match(URL) ?? []) {
-    if (u.replace(/[.,]$/, "") !== facts.link) issues.push(`contains a link that is not the payment link: ${u}`);
+    if (u.replace(/[.,]$/, "") !== facts.link)
+      issues.push(`contains a link that is not the payment link: ${u}`);
   }
-  if (PERCENT.test(body)) issues.push("mentions a percentage (discount, interest or fee) not in the case data");
+  if (PERCENT.test(body))
+    issues.push("mentions a percentage (discount, interest or fee) not in the case data");
   for (const d of body.match(DATE) ?? []) {
-    if (!facts.promiseDate || !sameDay(d, facts.promiseDate)) issues.push(`mentions a date that is not the customer's promised date: "${d}"`);
+    if (!facts.promiseDate || !sameDay(d, facts.promiseDate))
+      issues.push(`mentions a date that is not the customer's promised date: "${d}"`);
   }
   if (DEADLINE.test(body)) issues.push("sets a deadline that is not in the case data");
   for (const [re, why] of FORBIDDEN) if (re.test(body)) issues.push(why);

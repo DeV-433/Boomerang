@@ -33,7 +33,8 @@ describe.skipIf(!hasTestDb)("PgIdempotencyStore (2.5)", () => {
     expect(claimed).toHaveLength(1);
     const rejected = results.filter((r) => r.status === "rejected");
     expect(rejected).toHaveLength(9);
-    for (const r of rejected) expect((r as PromiseRejectedResult).reason).toBeInstanceOf(IdempotencyInFlightError);
+    for (const r of rejected)
+      expect((r as PromiseRejectedResult).reason).toBeInstanceOf(IdempotencyInFlightError);
   });
 
   it("allows a failed call to be retaken and counts the attempts", async () => {

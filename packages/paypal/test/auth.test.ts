@@ -8,7 +8,9 @@ function tokenEndpoint(expiresIn = 3600) {
   const fetchFn: FetchLike = async () => {
     issued++;
     await new Promise((r) => setTimeout(r, 1));
-    return new Response(JSON.stringify({ access_token: `token-${issued}`, expires_in: expiresIn }), { status: 200 });
+    return new Response(JSON.stringify({ access_token: `token-${issued}`, expires_in: expiresIn }), {
+      status: 200,
+    });
   };
   return { fetchFn, issued: () => issued };
 }
@@ -79,6 +81,10 @@ describe("TokenManager (2.1)", () => {
     const fetchFn: FetchLike = async () =>
       new Response('{"error":"invalid_client"}', { status: 401, headers: { "paypal-debug-id": "dbg-1" } });
     const tokens = new TokenManager(creds, fetchFn);
-    await expect(tokens.getToken()).rejects.toMatchObject({ status: 401, debugId: "dbg-1", errorName: "invalid_client" });
+    await expect(tokens.getToken()).rejects.toMatchObject({
+      status: 401,
+      debugId: "dbg-1",
+      errorName: "invalid_client",
+    });
   });
 });

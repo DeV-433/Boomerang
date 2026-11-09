@@ -22,6 +22,9 @@ export interface SimArmMetrics extends ArmTotals {
   contactsAfterOptOut: number;
   escalated?: number;
   heldForApproval?: number;
+  payPageUses?: number;
+  payPagePayments?: number;
+  payPagePromises?: number;
   modelCostPerRecoveredDollar?: number | null;
   model?: {
     all: {
@@ -258,6 +261,8 @@ export interface WhatIfOverrides {
   hoursStart?: number;
   hoursEnd?: number;
   contactDays?: number[];
+  /** 7C.7: Boomerang's reminders carry the self-serve pay page. */
+  payPage?: boolean;
 }
 
 export interface WhatIfMetrics {
@@ -274,6 +279,9 @@ export interface WhatIfMetrics {
   stopped: number;
   heldForApproval: number;
   medianDaysToRecovery: number | null;
+  payPageUses: number;
+  payPagePayments: number;
+  payPagePromises: number;
 }
 
 export interface WhatIfInterval {
@@ -314,6 +322,7 @@ export interface WhatIfDefaults {
   hoursStart: number;
   hoursEnd: number;
   contactDays: number[];
+  payPage: boolean;
 }
 
 // 7A.9: saved scenarios ---------------------------------------------------------------------------------

@@ -77,9 +77,13 @@ try {
       return p;
     };
   }
+  // 7C.7: --pay-page runs Boomerang with the self-serve page in its reminders (needs payPage in the batch's simulator config).
+  const payPage = process.argv.includes("--pay-page");
+  if (payPage && !simConfig.payPage) throw new Error("this batch's simulator config has no payPage settings");
   const strategy = loopStrategy({
-    name: which === "agent" ? "boomerang-agent" : "boomerang-rules",
+    name: `${which === "agent" ? "boomerang-agent" : "boomerang-rules"}${payPage ? "+paypage" : ""}`,
     proposer,
+    payPage,
   });
   const started = Date.now();
   const treatment = await simulateArm(simConfig, rng, treatmentCases, strategy, {

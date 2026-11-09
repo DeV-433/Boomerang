@@ -72,6 +72,8 @@ export function loopStrategy(options: {
   name: string;
   proposer: Proposer;
   policy?: Policy;
+  /** 7C.7: the loop's messages carry the self-serve pay page (needs `payPage` in the simulator config). */
+  payPage?: boolean;
 }): Strategy & {
   stats: TreatmentStats;
   decide(
@@ -86,6 +88,7 @@ export function loopStrategy(options: {
 
   return {
     name: options.name,
+    carriesPayPage: options.payPage ?? false,
     stats,
     async contactsFor(view: StrategyView): Promise<ContactKind[]> {
       let st = states.get(view.caseId);

@@ -33,7 +33,10 @@ describe.skipIf(!hasTestDb)("database schema", () => {
   });
 
   async function makeCase() {
-    const [customer] = await h.db.insert(customers).values({ email: "c@example.com", simulated: true }).returning();
+    const [customer] = await h.db
+      .insert(customers)
+      .values({ email: "c@example.com", simulated: true })
+      .returning();
     const [kase] = await h.db
       .insert(cases)
       .values({
@@ -76,7 +79,9 @@ describe.skipIf(!hasTestDb)("database schema", () => {
     const [approval] = await h.db.insert(approvals).values({ actionId: action!.id }).returning();
     expect(approval!.status).toBe("pending");
 
-    const orphan = h.db.insert(actions).values({ caseId: randomUUID(), action: "send_reminder", proposedBy: "rules" });
+    const orphan = h.db
+      .insert(actions)
+      .values({ caseId: randomUUID(), action: "send_reminder", proposedBy: "rules" });
     expect(await pgErrorCode(orphan)).toBe(FK_VIOLATION);
     expect(await pgErrorCode(h.db.insert(approvals).values({ actionId: randomUUID() }))).toBe(FK_VIOLATION);
   });
@@ -103,9 +108,9 @@ describe.skipIf(!hasTestDb)("database schema", () => {
         await client.query("set role boomerang_app");
         const { rowCount } = await client.query("select 1 from audit_log where id = $1", [entry.id]);
         expect(rowCount).toBe(1);
-        expect(await pgErrorCode(client.query("update audit_log set actor = 'x' where id = $1", [entry.id]))).toBe(
-          INSUFFICIENT_PRIVILEGE,
-        );
+        expect(
+          await pgErrorCode(client.query("update audit_log set actor = 'x' where id = $1", [entry.id])),
+        ).toBe(INSUFFICIENT_PRIVILEGE);
         expect(await pgErrorCode(client.query("delete from audit_log where id = $1", [entry.id]))).toBe(
           INSUFFICIENT_PRIVILEGE,
         );

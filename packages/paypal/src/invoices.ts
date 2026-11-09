@@ -26,7 +26,10 @@ export interface InvoiceList {
 const PROFILE = "invoice" as const;
 
 /** 2.4: one page of the merchant's invoices (read-only). */
-export async function listInvoices(gw: PayPalGateway, opts: { page?: number; pageSize?: number } = {}): Promise<InvoiceList> {
+export async function listInvoices(
+  gw: PayPalGateway,
+  opts: { page?: number; pageSize?: number } = {},
+): Promise<InvoiceList> {
   const { data } = await gw.callTool<InvoiceList>(PROFILE, "list_invoices", {
     page: opts.page ?? 1,
     page_size: opts.pageSize ?? 100,
@@ -80,14 +83,7 @@ export async function cancelInvoiceAutoReminder(
 }
 
 export type PaymentMethod =
-  | "BANK_TRANSFER"
-  | "CASH"
-  | "CHECK"
-  | "CREDIT_CARD"
-  | "DEBIT_CARD"
-  | "PAYPAL"
-  | "WIRE_TRANSFER"
-  | "OTHER";
+  "BANK_TRANSFER" | "CASH" | "CHECK" | "CREDIT_CARD" | "DEBIT_CARD" | "PAYPAL" | "WIRE_TRANSFER" | "OTHER";
 
 /**
  * 2.7: records a payment made outside PayPal (marks the invoice paid or partly paid).

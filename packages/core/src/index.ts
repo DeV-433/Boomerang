@@ -11,3 +11,11 @@ export {
 export * from "./domain";
 export * from "./messages";
 export * from "./api";
+export {
+  signPayLink,
+  verifyPayLink,
+  payLinkExpiry,
+  PAY_LINK_LIFETIME_DAYS,
+  PAY_PAGE_PROMISE_MAX_DAYS,
+  type PayLinkVerdict,
+} from "./paylink";

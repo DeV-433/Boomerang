@@ -18,7 +18,11 @@ function sslFor(url: string): pg.PoolConfig["ssl"] {
 }
 
 export function createDb(databaseUrl: string, options: { max?: number } = {}): DbHandle {
-  const pool = new pg.Pool({ connectionString: databaseUrl, max: options.max ?? 10, ssl: sslFor(databaseUrl) });
+  const pool = new pg.Pool({
+    connectionString: databaseUrl,
+    max: options.max ?? 10,
+    ssl: sslFor(databaseUrl),
+  });
   const db = drizzle(pool, { schema }) as Database;
   return { db, pool, close: () => pool.end() };
 }

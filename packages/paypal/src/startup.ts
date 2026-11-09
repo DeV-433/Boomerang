@@ -32,7 +32,9 @@ export function toolkitReport(): ToolkitReport {
 
 export function assertToolkitReady(report: ToolkitReport = toolkitReport()): ToolkitReport {
   if (report.missing.length > 0) {
-    throw new Error(`PayPal toolkit ${report.version} is missing whitelisted tools: ${report.missing.join(", ")}`);
+    throw new Error(
+      `PayPal toolkit ${report.version} is missing whitelisted tools: ${report.missing.join(", ")}`,
+    );
   }
   return report;
 }

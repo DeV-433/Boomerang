@@ -2,6 +2,7 @@ import { createLogger, loadConfig, requireConfig } from "@boomerang/core";
 import { createDb } from "@boomerang/db";
 import { assertToolkitReady, createPayPal } from "@boomerang/paypal";
 import { GroqClient, RecordingClient } from "@boomerang/agent";
+import { configurePayLinks } from "@boomerang/cases";
 import { buildApp, corsOriginsFrom } from "./app";
 
 const config = loadConfig();
@@ -28,6 +29,14 @@ const simulation =
     ? { secret: config.SIM_WEBHOOK_SECRET }
     : undefined;
 logger.info({ simulatedEvents: Boolean(simulation) }, "simulated event route");
+// 7C.6: messages link to the signed pay page when both settings are present (same as the worker,
+// so a message approved here passes the same lint it was drafted against).
+const payLinks =
+  config.PAY_LINK_SECRET && config.PUBLIC_BASE_URL
+    ? { secret: config.PAY_LINK_SECRET, baseUrl: config.PUBLIC_BASE_URL }
+    : null;
+configurePayLinks(payLinks);
+logger.info({ payPage: Boolean(config.PAY_LINK_SECRET), payLinksInMessages: Boolean(payLinks) }, "pay page");
 const corsOrigins = corsOriginsFrom(config);
 logger.info({ corsOrigins }, "dashboard origins");
 if (!config.OPERATOR_TOKEN)
@@ -41,6 +50,8 @@ const app = await buildApp({
   operatorToken: config.OPERATOR_TOKEN,
   policyMode: config.POLICY_MODE,
   gateway,
+  payLinkSecret: config.PAY_LINK_SECRET,
+  merchantName: config.MERCHANT_NAME,
   // 7B.6: typed attacks run against the real classifier and decision model (recorded for cost tracking).
   model: config.GROQ_API_KEY
     ? new RecordingClient(new GroqClient(config.GROQ_API_KEY, { rpm: config.GROQ_RPM }), {

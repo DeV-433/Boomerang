@@ -131,13 +131,9 @@
         "actions_case_id_cases_id_fk": {
           "name": "actions_case_id_cases_id_fk",
           "tableFrom": "actions",
-          "columnsFrom": [
-            "case_id"
-          ],
+          "columnsFrom": ["case_id"],
           "tableTo": "cases",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
@@ -146,9 +142,7 @@
       "uniqueConstraints": {
         "actions_idempotency_key_unique": {
           "name": "actions_idempotency_key_unique",
-          "columns": [
-            "idempotency_key"
-          ],
+          "columns": ["idempotency_key"],
           "nullsNotDistinct": false
         }
       },
@@ -218,13 +212,9 @@
         "approvals_action_id_actions_id_fk": {
           "name": "approvals_action_id_actions_id_fk",
           "tableFrom": "approvals",
-          "columnsFrom": [
-            "action_id"
-          ],
+          "columnsFrom": ["action_id"],
           "tableTo": "actions",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
@@ -233,9 +223,7 @@
       "uniqueConstraints": {
         "approvals_action_id_unique": {
           "name": "approvals_action_id_unique",
-          "columns": [
-            "action_id"
-          ],
+          "columns": ["action_id"],
           "nullsNotDistinct": false
         }
       },
@@ -324,13 +312,9 @@
         "audit_log_case_id_cases_id_fk": {
           "name": "audit_log_case_id_cases_id_fk",
           "tableFrom": "audit_log",
-          "columnsFrom": [
-            "case_id"
-          ],
+          "columnsFrom": ["case_id"],
           "tableTo": "cases",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
@@ -339,9 +323,7 @@
       "uniqueConstraints": {
         "audit_log_hash_unique": {
           "name": "audit_log_hash_unique",
-          "columns": [
-            "hash"
-          ],
+          "columns": ["hash"],
           "nullsNotDistinct": false
         }
       },
@@ -525,26 +507,18 @@
         "cases_customer_id_customers_id_fk": {
           "name": "cases_customer_id_customers_id_fk",
           "tableFrom": "cases",
-          "columnsFrom": [
-            "customer_id"
-          ],
+          "columnsFrom": ["customer_id"],
           "tableTo": "customers",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         },
         "cases_parent_case_id_cases_id_fk": {
           "name": "cases_parent_case_id_cases_id_fk",
           "tableFrom": "cases",
-          "columnsFrom": [
-            "parent_case_id"
-          ],
+          "columnsFrom": ["parent_case_id"],
           "tableTo": "cases",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
@@ -624,9 +598,7 @@
       "uniqueConstraints": {
         "customers_paypal_payer_ref_unique": {
           "name": "customers_paypal_payer_ref_unique",
-          "columns": [
-            "paypal_payer_ref"
-          ],
+          "columns": ["paypal_payer_ref"],
           "nullsNotDistinct": false
         }
       },
@@ -758,13 +730,9 @@
         "events_case_id_cases_id_fk": {
           "name": "events_case_id_cases_id_fk",
           "tableFrom": "events",
-          "columnsFrom": [
-            "case_id"
-          ],
+          "columnsFrom": ["case_id"],
           "tableTo": "cases",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
@@ -773,9 +741,7 @@
       "uniqueConstraints": {
         "events_paypal_event_id_unique": {
           "name": "events_paypal_event_id_unique",
-          "columns": [
-            "paypal_event_id"
-          ],
+          "columns": ["paypal_event_id"],
           "nullsNotDistinct": false
         }
       },
@@ -875,25 +841,12 @@
     "public.action_status": {
       "name": "action_status",
       "schema": "public",
-      "values": [
-        "proposed",
-        "held",
-        "blocked",
-        "approved",
-        "executed",
-        "failed",
-        "cancelled"
-      ]
+      "values": ["proposed", "held", "blocked", "approved", "executed", "failed", "cancelled"]
     },
     "public.approval_status": {
       "name": "approval_status",
       "schema": "public",
-      "values": [
-        "pending",
-        "approved",
-        "edited",
-        "rejected"
-      ]
+      "values": ["pending", "approved", "edited", "rejected"]
     },
     "public.case_state": {
       "name": "case_state",
@@ -913,35 +866,22 @@
     "public.experiment_group": {
       "name": "experiment_group",
       "schema": "public",
-      "values": [
-        "control",
-        "treatment"
-      ]
+      "values": ["control", "treatment"]
     },
     "public.gate_verdict": {
       "name": "gate_verdict",
       "schema": "public",
-      "values": [
-        "allow",
-        "hold",
-        "block"
-      ]
+      "values": ["allow", "hold", "block"]
     },
     "public.lane": {
       "name": "lane",
       "schema": "public",
-      "values": [
-        "invoice",
-        "subscription"
-      ]
+      "values": ["invoice", "subscription"]
     },
     "public.policy_mode": {
       "name": "policy_mode",
       "schema": "public",
-      "values": [
-        "dry_run",
-        "live"
-      ]
+      "values": ["dry_run", "live"]
     }
   },
   "schemas": {},

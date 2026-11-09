@@ -11,7 +11,12 @@ import { fakePayPal, INVOICE_ID, SUBSCRIPTION_ID } from "./fake-paypal";
  */
 const CONTRACT: Record<
   string,
-  { actions: Record<string, Record<string, boolean>>; params: string[]; sample: Record<string, unknown>; request: string }
+  {
+    actions: Record<string, Record<string, boolean>>;
+    params: string[];
+    sample: Record<string, unknown>;
+    request: string;
+  }
 > = {
   list_invoices: {
     actions: { invoices: { list: true } },
@@ -77,7 +82,11 @@ describe("toolkit contract (2.10)", () => {
   });
 
   it("covers every whitelisted toolkit tool", () => {
-    const whitelisted = new Set([...TOOL_WHITELIST.invoice, ...TOOL_WHITELIST.subscription].filter((t) => !REST_OPERATIONS.includes(t as never)));
+    const whitelisted = new Set(
+      [...TOOL_WHITELIST.invoice, ...TOOL_WHITELIST.subscription].filter(
+        (t) => !REST_OPERATIONS.includes(t as never),
+      ),
+    );
     for (const tool of whitelisted) expect(Object.keys(CONTRACT).concat(EXISTS_ONLY), tool).toContain(tool);
   });
 
@@ -109,7 +118,11 @@ describe("toolkit contract (2.10)", () => {
 
     it.each(Object.entries(CONTRACT))("%s calls the expected PayPal endpoint", async (tool, spec) => {
       const parsed = toolRegistry().get(tool)!.parameters.safeParse(spec.sample);
-      await runToolkitMethod(tool, parsed.data, { accessToken: "contract", sandbox: true, requestId: "contract-key" });
+      await runToolkitMethod(tool, parsed.data, {
+        accessToken: "contract",
+        sandbox: true,
+        requestId: "contract-key",
+      });
       const calls = paypal.requests.map((r) => `${r.method} ${r.path}`);
       expect(calls).toEqual([spec.request]);
       expect(paypal.requests[0]!.headers["paypal-request-id"]).toBe("contract-key");
