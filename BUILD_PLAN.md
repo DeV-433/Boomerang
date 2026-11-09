@@ -10,7 +10,7 @@ One fragment at a time. Every step is small enough to build, test and commit on 
 
 ## Current status (read this first)
 
-Last updated 2026-11-09. Phases 0 to 3 are done (checkpoints **CP1** and **CP2** reached); next up is **Phase 4**.
+Last updated 2026-11-09. Phases 0 to 4 are done (checkpoints **CP1**, **CP2** and **CP3** reached); next up is **Phase 5** (agent).
 Ticked boxes below were checked against their *Done when*; an unticked box with a note in _italics_ is partly done.
 
 Decisions that differ from the text of this plan:
@@ -23,6 +23,9 @@ Decisions that differ from the text of this plan:
 | Deploys | Render deploys every push to `main` (`autoDeployTrigger: commit`), so the pre-push hook is the only gate. |
 | Extra package | `packages/cases` turns stored PayPal events into cases (started in 3.4; step 4.3 extends it). |
 | Sandbox customers | PayPal blocks invoices to recipients inside India. Seeded invoices go to US `example.com` addresses; the sandbox *customer* account is a US personal account. |
+| Diagnosis (4.5) | "Viewed but unpaid" is not observable (PayPal's API does not report invoice views), so the invoice lane uses `overdue_unresponsive` ("contacted, no reply"). |
+| Who the loop works | Never control-arm cases. A seeded batch's treatment cases only after `startBatch` (no batch has been started yet). Organic cases (not in a batch) are worked as soon as they open. |
+| Locks | Any transaction that locks rows and writes audit must use `auditedTransaction` (takes the chain lock first); mixing orders deadlocks. |
 
 Facts found while building that later steps depend on:
 
@@ -35,8 +38,13 @@ Facts found while building that later steps depend on:
 The demo batch **`demo-1`** (300 cases: 170 real backdated sandbox invoices, 130 simulated subscriptions, split
 150/150) lives in the **deployed Render database**. Do not re-seed `demo-1` against another database: the PayPal
 idempotency ledger is per database, so the 170 invoices would be created twice. Baseline on its control arm (CP2):
-$46,472.50 of $71,087.62 recovered (65.4%). Useful commands: `npm run ci`, `npm run sim:seed`, `npm run sim:baseline`
-(see `sim/README.md`), `packages/paypal/scripts/sandbox-check.ts` for a live PayPal round trip.
+$46,472.50 of $71,087.62 recovered (65.4%). Rule-based treatment (CP3): 56.5%, which is -8.9 points against the
+control arm but -4.2 points against the baseline on the *same* cases (the arms differ by luck). Subscriptions gain
++22 points (card-update requests); invoices lose ~6 points because the 3-contact cap hands cases to a person, whose
+follow-up the simulator does not model. Treat this as a finding about the policy, not a bug to tune away.
+Render runs the worker in `dry_run`; a live round trip was verified locally with
+`npx tsx packages/cases/scripts/live-e2e.ts` (real reminder sent, payment closed the case, chain verified). Useful commands: `npm run ci`, `npm run sim:seed`, `npm run sim:baseline`,
+`npm run sim:treatment` (see `sim/README.md`), `packages/paypal/scripts/sandbox-check.ts` for a live PayPal round trip.
 
 ---
 
@@ -136,22 +144,22 @@ No cut line: every phase is in scope (decided 2026-11-09, step 0.7).
 
 ## Phase 4: Core loop without AI (to CP3)
 
-- [ ] **4.1 [M]** Case state machine with legal transitions only. *Done when:* an illegal transition throws and every legal one is tested.
-- [ ] **4.2 [M]** Audit writer with hash chaining. *Done when:* each entry stores the previous hash and a verification function passes on a chain of 100 entries.
-- [ ] **4.3 [M]** Case opener from stored events (subscription failed, invoice paid, cancelled, dispute). *Done when:* each event type produces the expected case change.
-- [ ] **4.4 [M]** Overdue poller in the worker: list invoices, compare due dates, open cases. *Done when:* a past-due sandbox invoice opens one case, not two.
-- [ ] **4.5 [M]** Rule-based diagnosis returning a cause label for every case type. *Done when:* a table of example inputs maps to the expected labels.
-- [ ] **4.6 [M]** Action menus per lane as typed enums. *Done when:* the type system rejects an unknown action.
-- [ ] **4.7 [M]** Rule-based proposer (placeholder for the agent): maps cause to first action using the table in section 8. *Done when:* every cause has a proposal.
-- [ ] **4.8 [M]** Policy gate rules 1 to 3 (resolved, dispute, opt-out). *Done when:* unit tests pass for each.
-- [ ] **4.9 [M]** Policy gate rules 4 to 8 (kill switch, whitelist, caps, spacing, contact hours). *Done when:* unit tests pass, including time-zone cases.
-- [ ] **4.10 [M]** Policy gate rules 9 to 12 (amount threshold, confidence, message lint hook, sensitive actions). *Done when:* unit tests pass.
-- [ ] **4.11 [M]** Rule-order test: a property test that the first failing rule always decides. *Done when:* shuffled inputs never change the verdict order.
-- [ ] **4.12 [M]** Executor: translate an allowed action into a whitelisted PayPal call, record request, response and idempotency key. *Done when:* a gated reminder is sent and logged.
-- [ ] **4.13 [M]** Pre-execution re-check: re-read case state right before the call; a paid event overrides. *Done when:* a test where payment arrives mid-flight sends nothing.
-- [ ] **4.14 [M]** Follow-up scheduler in the worker reading due jobs from the database; cancelled on stop. *Done when:* stopping a case removes its pending jobs.
-- [ ] **4.15 [M]** Observation handler: paid event closes the case as recovered; no-reply moves it to the next stage. *Done when:* both paths are tested end to end.
-- [ ] **4.16 [M]** Run the treatment arm with the rule-based proposer through the simulator. *Done when:* a batch finishes and reports recovered dollars. **CP3.**
+- [x] **4.1 [M]** Case state machine with legal transitions only. *Done when:* an illegal transition throws and every legal one is tested.
+- [x] **4.2 [M]** Audit writer with hash chaining. *Done when:* each entry stores the previous hash and a verification function passes on a chain of 100 entries.
+- [x] **4.3 [M]** Case opener from stored events (subscription failed, invoice paid, cancelled, dispute). *Done when:* each event type produces the expected case change.
+- [x] **4.4 [M]** Overdue poller in the worker: list invoices, compare due dates, open cases. *Done when:* a past-due sandbox invoice opens one case, not two.
+- [x] **4.5 [M]** Rule-based diagnosis returning a cause label for every case type. *Done when:* a table of example inputs maps to the expected labels.
+- [x] **4.6 [M]** Action menus per lane as typed enums. *Done when:* the type system rejects an unknown action.
+- [x] **4.7 [M]** Rule-based proposer (placeholder for the agent): maps cause to first action using the table in section 8. *Done when:* every cause has a proposal.
+- [x] **4.8 [M]** Policy gate rules 1 to 3 (resolved, dispute, opt-out). *Done when:* unit tests pass for each.
+- [x] **4.9 [M]** Policy gate rules 4 to 8 (kill switch, whitelist, caps, spacing, contact hours). *Done when:* unit tests pass, including time-zone cases.
+- [x] **4.10 [M]** Policy gate rules 9 to 12 (amount threshold, confidence, message lint hook, sensitive actions). *Done when:* unit tests pass.
+- [x] **4.11 [M]** Rule-order test: a property test that the first failing rule always decides. *Done when:* shuffled inputs never change the verdict order.
+- [x] **4.12 [M]** Executor: translate an allowed action into a whitelisted PayPal call, record request, response and idempotency key. *Done when:* a gated reminder is sent and logged.
+- [x] **4.13 [M]** Pre-execution re-check: re-read case state right before the call; a paid event overrides. *Done when:* a test where payment arrives mid-flight sends nothing.
+- [x] **4.14 [M]** Follow-up scheduler in the worker reading due jobs from the database; cancelled on stop. *Done when:* stopping a case removes its pending jobs.
+- [x] **4.15 [M]** Observation handler: paid event closes the case as recovered; no-reply moves it to the next stage. *Done when:* both paths are tested end to end.
+- [x] **4.16 [M]** Run the treatment arm with the rule-based proposer through the simulator. *Done when:* a batch finishes and reports recovered dollars. **CP3.**
 
 ---
 
