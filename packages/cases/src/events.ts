@@ -11,7 +11,11 @@ type Money = { currency_code?: string; value?: string };
 interface SubscriptionResource {
   id?: string;
   status?: string;
-  subscriber?: { email_address?: string; payer_id?: string; name?: { given_name?: string; surname?: string } };
+  subscriber?: {
+    email_address?: string;
+    payer_id?: string;
+    name?: { given_name?: string; surname?: string };
+  };
   billing_info?: {
     outstanding_balance?: Money;
     last_failed_payment?: { amount?: Money; reason_code?: string };
@@ -44,7 +48,10 @@ const invoiceOf = (event: EventRow): InvoiceResource => {
 };
 
 async function openCaseFor(tx: Tx, lane: "invoice" | "subscription", ref: string) {
-  const [row] = await tx.select().from(cases).where(and(eq(cases.lane, lane), eq(cases.paypalRef, ref), isNull(cases.closedAt)));
+  const [row] = await tx
+    .select()
+    .from(cases)
+    .where(and(eq(cases.lane, lane), eq(cases.paypalRef, ref), isNull(cases.closedAt)));
   return row ?? null;
 }
 
@@ -53,30 +60,57 @@ async function observed(ctx: Ctx, caseId: string, data: Record<string, unknown>)
     caseId,
     actor: ctx.event.simulated ? "simulator" : ctx.event.source === "poll" ? "poller" : "paypal",
     kind: "event_received",
-    data: { eventId: ctx.event.paypalEventId, type: ctx.event.type, storedEventId: ctx.event.id, simulated: ctx.event.simulated, ...data },
+    data: {
+      eventId: ctx.event.paypalEventId,
+      type: ctx.event.type,
+      storedEventId: ctx.event.id,
+      simulated: ctx.event.simulated,
+      ...data,
+    },
     at: ctx.now,
   });
 }
 
-async function upsertCustomer(tx: Tx, c: { payerRef?: string | null; email?: string | null; name?: string | null; simulated: boolean }): Promise<string> {
+async function upsertCustomer(
+  tx: Tx,
+  c: { payerRef?: string | null; email?: string | null; name?: string | null; simulated: boolean },
+): Promise<string> {
   if (c.payerRef) {
     const [row] = await tx
       .insert(customers)
-      .values({ paypalPayerRef: c.payerRef, email: c.email ?? null, name: c.name ?? null, simulated: c.simulated })
-      .onConflictDoUpdate({ target: customers.paypalPayerRef, set: { email: sql`coalesce(excluded.email, ${customers.email})` } })
+      .values({
+        paypalPayerRef: c.payerRef,
+        email: c.email ?? null,
+        name: c.name ?? null,
+        simulated: c.simulated,
+      })
+      .onConflictDoUpdate({
+        target: customers.paypalPayerRef,
+        set: { email: sql`coalesce(excluded.email, ${customers.email})` },
+      })
       .returning({ id: customers.id });
     return row!.id;
   }
   if (c.email) {
-    const [existing] = await tx.select({ id: customers.id }).from(customers).where(eq(customers.email, c.email)).limit(1);
+    const [existing] = await tx
+      .select({ id: customers.id })
+      .from(customers)
+      .where(eq(customers.email, c.email))
+      .limit(1);
     if (existing) return existing.id;
   }
-  const [row] = await tx.insert(customers).values({ email: c.email ?? null, name: c.name ?? null, simulated: c.simulated }).returning({ id: customers.id });
+  const [row] = await tx
+    .insert(customers)
+    .values({ email: c.email ?? null, name: c.name ?? null, simulated: c.simulated })
+    .returning({ id: customers.id });
   return row!.id;
 }
 
 /** Inserts a case, or returns the open one if a concurrent processor won the race. */
-async function insertCase(tx: Tx, values: typeof cases.$inferInsert): Promise<{ id: string; created: boolean }> {
+async function insertCase(
+  tx: Tx,
+  values: typeof cases.$inferInsert,
+): Promise<{ id: string; created: boolean }> {
   const [created] = await tx.insert(cases).values(values).onConflictDoNothing().returning({ id: cases.id });
   if (created) return { id: created.id, created: true };
   const existing = await openCaseFor(tx, values.lane, values.paypalRef);
@@ -89,7 +123,8 @@ async function onSubscriptionPaymentFailed(ctx: Ctx): Promise<string | null> {
   const r = resourceOf<SubscriptionResource>(ctx.event);
   if (!r.id) return null;
   const outstanding = r.billing_info?.outstanding_balance;
-  const money = outstanding && Number(outstanding.value) > 0 ? outstanding : r.billing_info?.last_failed_payment?.amount;
+  const money =
+    outstanding && Number(outstanding.value) > 0 ? outstanding : r.billing_info?.last_failed_payment?.amount;
   const amountCents = toCents(money?.value);
   const facts = {
     paypalStatus: r.status ?? "ACTIVE",
@@ -111,7 +146,17 @@ async function onSubscriptionPaymentFailed(ctx: Ctx): Promise<string | null> {
       name: [r.subscriber?.name?.given_name, r.subscriber?.name?.surname].filter(Boolean).join(" ") || null,
       simulated: ctx.event.simulated,
     });
-    caseId = (await insertCase(ctx.tx, { lane: "subscription", paypalRef: r.id, customerId, amountCents, currency: money?.currency_code ?? "USD", simulated: ctx.event.simulated, ...facts })).id;
+    caseId = (
+      await insertCase(ctx.tx, {
+        lane: "subscription",
+        paypalRef: r.id,
+        customerId,
+        amountCents,
+        currency: money?.currency_code ?? "USD",
+        simulated: ctx.event.simulated,
+        ...facts,
+      })
+    ).id;
   }
   await observed(ctx, caseId, { subscriptionId: r.id, amountCents, ...facts });
   await scheduleCheck(ctx.tx, caseId, ctx.now, "payment failed");
@@ -125,7 +170,11 @@ async function onSubscriptionSuspended(ctx: Ctx): Promise<string | null> {
   const balance = toCents(r.billing_info?.outstanding_balance?.value);
   await ctx.tx
     .update(cases)
-    .set({ paypalStatus: "SUSPENDED", amountCents: balance > 0 ? balance : open.amountCents, updatedAt: sql`now()` })
+    .set({
+      paypalStatus: "SUSPENDED",
+      amountCents: balance > 0 ? balance : open.amountCents,
+      updatedAt: sql`now()`,
+    })
     .where(eq(cases.id, open.id));
   await observed(ctx, open.id, { paypalStatus: "SUSPENDED", outstandingCents: balance });
   await scheduleCheck(ctx.tx, open.id, ctx.now, "subscription suspended");
@@ -137,20 +186,37 @@ async function onSubscriptionCancelled(ctx: Ctx): Promise<string | null> {
   const open = r.id ? await openCaseFor(ctx.tx, "subscription", r.id) : null;
   if (!open) return null;
   const balance = toCents(r.billing_info?.outstanding_balance?.value);
-  await ctx.tx.update(cases).set({ paypalStatus: "CANCELLED", amountCents: balance, updatedAt: sql`now()` }).where(eq(cases.id, open.id));
+  await ctx.tx
+    .update(cases)
+    .set({ paypalStatus: "CANCELLED", amountCents: balance, updatedAt: sql`now()` })
+    .where(eq(cases.id, open.id));
   await observed(ctx, open.id, { paypalStatus: "CANCELLED", outstandingCents: balance });
-  if (balance === 0) await closeCase(ctx.tx, open.id, "stopped", "subscription cancelled with nothing owing", "paypal", { at: ctx.now });
+  if (balance === 0)
+    await closeCase(ctx.tx, open.id, "stopped", "subscription cancelled with nothing owing", "paypal", {
+      at: ctx.now,
+    });
   else await scheduleCheck(ctx.tx, open.id, ctx.now, "subscription cancelled with a balance");
   return open.id;
 }
 
 /** A subscription payment went through. The sale's own id is resource.id; the subscription is billing_agreement_id. */
 async function onSaleCompleted(ctx: Ctx): Promise<string | null> {
-  const r = resourceOf<{ id?: string; billing_agreement_id?: string; amount?: { total?: string } }>(ctx.event);
-  const open = r.billing_agreement_id ? await openCaseFor(ctx.tx, "subscription", r.billing_agreement_id) : null;
+  const r = resourceOf<{ id?: string; billing_agreement_id?: string; amount?: { total?: string } }>(
+    ctx.event,
+  );
+  const open = r.billing_agreement_id
+    ? await openCaseFor(ctx.tx, "subscription", r.billing_agreement_id)
+    : null;
   if (!open) return null;
-  await observed(ctx, open.id, { saleId: r.id, subscriptionId: r.billing_agreement_id, paid: r.amount?.total ?? null });
-  await closeCase(ctx.tx, open.id, "recovered", "subscription payment completed", "paypal", { recoveredCents: open.amountCents, at: ctx.now });
+  await observed(ctx, open.id, {
+    saleId: r.id,
+    subscriptionId: r.billing_agreement_id,
+    paid: r.amount?.total ?? null,
+  });
+  await closeCase(ctx.tx, open.id, "recovered", "subscription payment completed", "paypal", {
+    recoveredCents: open.amountCents,
+    at: ctx.now,
+  });
   return open.id;
 }
 
@@ -163,12 +229,18 @@ async function onInvoiceStatus(ctx: Ctx): Promise<string | null> {
   if (!open) return null;
   const status = (inv.status ?? "").toUpperCase();
   const due = inv.due_amount ? toCents(inv.due_amount.value) : null;
-  await ctx.tx.update(cases).set({ paypalStatus: status || open.paypalStatus, updatedAt: sql`now()` }).where(eq(cases.id, open.id));
+  await ctx.tx
+    .update(cases)
+    .set({ paypalStatus: status || open.paypalStatus, updatedAt: sql`now()` })
+    .where(eq(cases.id, open.id));
   await observed(ctx, open.id, { invoiceId: inv.id, paypalStatus: status, dueCents: due });
 
   if (PAID_STATUSES.includes(status)) {
     // INVOICING.INVOICE.PAID also fires for a payment made and pending; PayPal reports that as PAYMENT_PENDING.
-    await closeCase(ctx.tx, open.id, "recovered", `PayPal reports ${status}`, "paypal", { recoveredCents: open.amountCents, at: ctx.now });
+    await closeCase(ctx.tx, open.id, "recovered", `PayPal reports ${status}`, "paypal", {
+      recoveredCents: open.amountCents,
+      at: ctx.now,
+    });
   } else if (CLOSED_UNPAID_STATUSES.includes(status)) {
     await closeCase(ctx.tx, open.id, "stopped", `invoice ${status.toLowerCase()}`, "paypal", { at: ctx.now });
   } else if (status === "PARTIALLY_PAID" && due !== null && due < open.amountCents) {
@@ -184,12 +256,19 @@ async function onInvoiceOverdue(ctx: Ctx): Promise<string | null> {
   const open = await openCaseFor(ctx.tx, "invoice", inv.id);
   const facts = { paypalStatus: inv.status ?? "SENT", dueDate: inv.detail?.payment_term?.due_date ?? null };
   if (open) {
-    await ctx.tx.update(cases).set({ ...facts, updatedAt: sql`now()` }).where(eq(cases.id, open.id));
+    await ctx.tx
+      .update(cases)
+      .set({ ...facts, updatedAt: sql`now()` })
+      .where(eq(cases.id, open.id));
     await observed(ctx, open.id, { invoiceId: inv.id, ...facts, alreadyOpen: true });
     return open.id;
   }
   const recipient = inv.primary_recipients?.[0]?.billing_info;
-  const customerId = await upsertCustomer(ctx.tx, { email: recipient?.email_address, name: recipient?.name?.full_name, simulated: false });
+  const customerId = await upsertCustomer(ctx.tx, {
+    email: recipient?.email_address,
+    name: recipient?.name?.full_name,
+    simulated: false,
+  });
   const money = inv.due_amount ?? inv.amount;
   const { id } = await insertCase(ctx.tx, {
     lane: "invoice",
@@ -211,12 +290,24 @@ async function onInvoiceOverdue(ctx: Ctx): Promise<string | null> {
  * transaction, not the invoice, so the case is found through the invoice number or id it carries.
  */
 async function onDispute(ctx: Ctx): Promise<string | null> {
-  const r = resourceOf<{ dispute_id?: string; disputed_transactions?: { invoice_number?: string; seller_transaction_id?: string; custom?: string }[] }>(ctx.event);
-  const refs = (r.disputed_transactions ?? []).flatMap((t) => [t.invoice_number, t.custom, t.seller_transaction_id]).filter((x): x is string => Boolean(x));
+  const r = resourceOf<{
+    dispute_id?: string;
+    disputed_transactions?: { invoice_number?: string; seller_transaction_id?: string; custom?: string }[];
+  }>(ctx.event);
+  const refs = (r.disputed_transactions ?? [])
+    .flatMap((t) => [t.invoice_number, t.custom, t.seller_transaction_id])
+    .filter((x): x is string => Boolean(x));
   if (refs.length === 0) return null;
-  const [open] = await ctx.tx.select().from(cases).where(and(inArray(cases.paypalRef, refs), isNull(cases.closedAt))).limit(1);
+  const [open] = await ctx.tx
+    .select()
+    .from(cases)
+    .where(and(inArray(cases.paypalRef, refs), isNull(cases.closedAt)))
+    .limit(1);
   if (!open) return null;
-  await ctx.tx.update(cases).set({ disputed: true, updatedAt: sql`now()` }).where(eq(cases.id, open.id));
+  await ctx.tx
+    .update(cases)
+    .set({ disputed: true, updatedAt: sql`now()` })
+    .where(eq(cases.id, open.id));
   await observed(ctx, open.id, { disputeId: r.dispute_id ?? null });
   await scheduleCheck(ctx.tx, open.id, ctx.now, "dispute opened");
   return open.id;
@@ -227,7 +318,12 @@ async function onDispute(ctx: Ctx): Promise<string | null> {
  * self-serve page in 7C, or by the simulator). Raw text is stored on the event, never passed on.
  */
 async function onCustomerReply(ctx: Ctx): Promise<string | null> {
-  const r = resourceOf<{ paypal_ref?: string; lane?: "invoice" | "subscription"; classification?: string; promise_date?: string }>(ctx.event);
+  const r = resourceOf<{
+    paypal_ref?: string;
+    lane?: "invoice" | "subscription";
+    classification?: string;
+    promise_date?: string;
+  }>(ctx.event);
   if (!r.paypal_ref || !r.lane) return null;
   const open = await openCaseFor(ctx.tx, r.lane, r.paypal_ref);
   if (!open) return null;
@@ -237,7 +333,10 @@ async function onCustomerReply(ctx: Ctx): Promise<string | null> {
   } else if (label === "dispute") {
     await ctx.tx.update(cases).set({ disputed: true }).where(eq(cases.id, open.id));
   } else if (label === "opt_out") {
-    await ctx.tx.update(customers).set({ optedOut: true, optedOutAt: ctx.now }).where(eq(customers.id, open.customerId));
+    await ctx.tx
+      .update(customers)
+      .set({ optedOut: true, optedOutAt: ctx.now })
+      .where(eq(customers.id, open.customerId));
   }
   await observed(ctx, open.id, { classification: label, promiseDate: r.promise_date ?? null });
   await scheduleCheck(ctx.tx, open.id, ctx.now, `customer reply: ${label}`);
@@ -267,7 +366,10 @@ export const HANDLED_EVENT_TYPES = Object.keys(HANDLERS);
  * FOR UPDATE SKIP LOCKED, so the worker and the seeder can run this at the same time safely.
  * Types without a handler (for example INVOICING.INVOICE.CREATED) are marked processed with no case.
  */
-export async function processPendingEvents(db: Database, options: { limit?: number; logger?: Logger; now?: () => Date } = {}): Promise<number> {
+export async function processPendingEvents(
+  db: Database,
+  options: { limit?: number; logger?: Logger; now?: () => Date } = {},
+): Promise<number> {
   let processed = 0;
   const limit = options.limit ?? 500;
   for (;;) {
@@ -288,8 +390,14 @@ export async function processPendingEvents(db: Database, options: { limit?: numb
       if (!event) return false;
       const handler = HANDLERS[event.type];
       const caseId = handler ? await handler({ tx, event, now: options.now?.() ?? new Date() }) : null;
-      await tx.update(events).set({ processedAt: sql`now()`, caseId: caseId ?? event.caseId }).where(eq(events.id, event.id));
-      options.logger?.info({ eventId: event.paypalEventId, type: event.type, caseId, handled: Boolean(handler) }, "event processed");
+      await tx
+        .update(events)
+        .set({ processedAt: sql`now()`, caseId: caseId ?? event.caseId })
+        .where(eq(events.id, event.id));
+      options.logger?.info(
+        { eventId: event.paypalEventId, type: event.type, caseId, handled: Boolean(handler) },
+        "event processed",
+      );
       return true;
     });
     if (!done) break;

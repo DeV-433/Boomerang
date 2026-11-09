@@ -1,4 +1,5 @@
 import {
+  RowSelectionModule,
   ColumnApiModule,
   RowApiModule,
   CellStyleModule,
@@ -42,6 +43,7 @@ export function setupGrid(): void {
     MasterDetailModule,
     PaginationModule,
     CellStyleModule,
+    RowSelectionModule,
     ClientSideRowModelModule,
     ColumnApiModule,
     RowApiModule,

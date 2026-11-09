@@ -17,7 +17,13 @@ export async function lockCase(tx: Tx, caseId: string) {
 }
 
 /** Moves a case to a new state, enforcing the state machine. */
-export async function setState(tx: Tx, caseId: string, from: CaseState, to: CaseState, extra: Parameters<ReturnType<Tx["update"]>["set"]>[0] = {}) {
+export async function setState(
+  tx: Tx,
+  caseId: string,
+  from: CaseState,
+  to: CaseState,
+  extra: Parameters<ReturnType<Tx["update"]>["set"]>[0] = {},
+) {
   transition(from, to);
   await tx
     .update(cases)
@@ -106,26 +112,55 @@ export async function closeCase(
   const current = await lockCase(tx, caseId);
   if (!current || isEndState(current.state)) return false;
   const recoveredCents = endState === "recovered" ? (options.recoveredCents ?? current.amountCents) : 0;
-  await setState(tx, caseId, current.state, endState, { closedAt: options.at ?? new Date(), closeReason: reason, recoveredCents, nextCheckAt: null });
+  await setState(tx, caseId, current.state, endState, {
+    closedAt: options.at ?? new Date(),
+    closeReason: reason,
+    recoveredCents,
+    nextCheckAt: null,
+  });
   await tx
     .update(actions)
     .set({ status: "cancelled" })
     .where(and(eq(actions.caseId, caseId), inArray(actions.status, ["proposed", "held", "approved"])));
   const cancelledJobs = await cancelJobs(tx, caseId);
-  await writeAudit(tx, { caseId, actor, kind: "closed", data: { endState, reason, recoveredCents, fromState: current.state, cancelledJobs }, at: options.at });
+  await writeAudit(tx, {
+    caseId,
+    actor,
+    kind: "closed",
+    data: { endState, reason, recoveredCents, fromState: current.state, cancelledJobs },
+    at: options.at,
+  });
   return true;
 }
 
 /** The merchant's current policy, creating version 1 from the defaults on first use. */
 export async function loadPolicy(db: Database, modeOverride?: "dry_run" | "live"): Promise<Policy> {
-  const [row] = await db.select().from(policies).where(eq(policies.merchantId, MERCHANT_ID)).orderBy(desc(policies.version)).limit(1);
+  const [row] = await db
+    .select()
+    .from(policies)
+    .where(eq(policies.merchantId, MERCHANT_ID))
+    .orderBy(desc(policies.version))
+    .limit(1);
   let policy: Policy;
   if (row) {
-    policy = { version: row.version, mode: row.mode, caps: row.caps as Policy["caps"], hours: row.hours as Policy["hours"], thresholds: row.thresholds as Policy["thresholds"] };
+    policy = {
+      version: row.version,
+      mode: row.mode,
+      caps: row.caps as Policy["caps"],
+      hours: row.hours as Policy["hours"],
+      thresholds: row.thresholds as Policy["thresholds"],
+    };
   } else {
     await db
       .insert(policies)
-      .values({ merchantId: MERCHANT_ID, version: DEFAULT_POLICY.version, mode: DEFAULT_POLICY.mode, caps: DEFAULT_POLICY.caps, hours: DEFAULT_POLICY.hours, thresholds: DEFAULT_POLICY.thresholds })
+      .values({
+        merchantId: MERCHANT_ID,
+        version: DEFAULT_POLICY.version,
+        mode: DEFAULT_POLICY.mode,
+        caps: DEFAULT_POLICY.caps,
+        hours: DEFAULT_POLICY.hours,
+        thresholds: DEFAULT_POLICY.thresholds,
+      })
       .onConflictDoNothing();
     policy = DEFAULT_POLICY;
   }

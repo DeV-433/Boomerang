@@ -45,7 +45,12 @@ export const CLOSED_UNPAID_STATUSES = ["CANCELLED", "REFUNDED", "MARKED_AS_REFUN
  * Failure reasons where retrying cannot help: the payment method itself is the problem.
  * Codes from PayPal's subscription failed-payment records; confirm against live data (section 8).
  */
-export const HARD_FAILURE_REASONS = ["PAYER_CANNOT_PAY", "PAYMENT_DENIED", "PAYER_ACCOUNT_RESTRICTED", "PAYER_ACCOUNT_LOCKED_OR_CLOSED"];
+export const HARD_FAILURE_REASONS = [
+  "PAYER_CANNOT_PAY",
+  "PAYMENT_DENIED",
+  "PAYER_ACCOUNT_RESTRICTED",
+  "PAYER_ACCOUNT_LOCKED_OR_CLOSED",
+];
 
 /** PayPal's default payment_failure_threshold; at this count the subscription is suspended. */
 export const FAILURE_THRESHOLD = 3;
@@ -62,7 +67,8 @@ export function isoDay(d: Date): string {
  * invoice views), so the invoice lane uses "contacted, no reply" (overdue_unresponsive) instead.
  */
 /** A PayPal reason code is UPPER_SNAKE_CASE; anything else came from somewhere it should not have. */
-const reasonCode = (r: string | null) => (r && /^[A-Z][A-Z_]{2,48}$/.test(r) ? r : r ? "UNRECOGNISED_REASON" : null);
+const reasonCode = (r: string | null) =>
+  r && /^[A-Z][A-Z_]{2,48}$/.test(r) ? r : r ? "UNRECOGNISED_REASON" : null;
 
 export function diagnose(s: CaseSnapshot, now: Date): Diagnosis {
   const d = (cause: Cause, rule: string): Diagnosis => ({ cause, rule, method: "rules" });
@@ -70,7 +76,11 @@ export function diagnose(s: CaseSnapshot, now: Date): Diagnosis {
   const status = s.paypalStatus?.toUpperCase() ?? null;
 
   // Invoice statuses only: for a subscription, CANCELLED can still mean money owed (handled below).
-  if (s.lane === "invoice" && status && (PAID_STATUSES.includes(status) || CLOSED_UNPAID_STATUSES.includes(status))) {
+  if (
+    s.lane === "invoice" &&
+    status &&
+    (PAID_STATUSES.includes(status) || CLOSED_UNPAID_STATUSES.includes(status))
+  ) {
     return d("resolved", `paypal status ${status}`);
   }
   if (s.disputed) return d("dispute", "dispute recorded on the case");
@@ -78,16 +88,27 @@ export function diagnose(s: CaseSnapshot, now: Date): Diagnosis {
 
   if (s.lane === "subscription") {
     if (status === "CANCELLED" || status === "EXPIRED") {
-      return s.amountCents > 0 ? d("cancelled_with_balance", `subscription ${status} with balance owing`) : d("resolved", `subscription ${status}, nothing owed`);
+      return s.amountCents > 0
+        ? d("cancelled_with_balance", `subscription ${status} with balance owing`)
+        : d("resolved", `subscription ${status}, nothing owed`);
     }
-    if (status === "SUSPENDED" || s.failedPayments >= FAILURE_THRESHOLD) return d("threshold_reached", `suspended or ${s.failedPayments} failed payments`);
-    if (reason && HARD_FAILURE_REASONS.includes(reason)) return d("expired_funding_source", `hard failure ${reason}`);
+    if (status === "SUSPENDED" || s.failedPayments >= FAILURE_THRESHOLD)
+      return d("threshold_reached", `suspended or ${s.failedPayments} failed payments`);
+    if (reason && HARD_FAILURE_REASONS.includes(reason))
+      return d("expired_funding_source", `hard failure ${reason}`);
     if (s.failedPayments >= 2) return d("expired_funding_source", "repeated failure after PayPal's retry");
-    return d("temporary_decline", `first failure${reason ? ` (${reason})` : ""}, may clear on PayPal's retry`);
+    return d(
+      "temporary_decline",
+      `first failure${reason ? ` (${reason})` : ""}, may clear on PayPal's retry`,
+    );
   }
 
   if (s.promiseDate) {
-    return s.promiseDate >= isoDay(now) ? d("promise_to_pay", `promised by ${s.promiseDate}`) : d("broken_promise", `promise date ${s.promiseDate} passed unpaid`);
+    return s.promiseDate >= isoDay(now)
+      ? d("promise_to_pay", `promised by ${s.promiseDate}`)
+      : d("broken_promise", `promise date ${s.promiseDate} passed unpaid`);
   }
-  return s.contacts === 0 ? d("overdue_no_engagement", "overdue, not yet contacted") : d("overdue_unresponsive", `${s.contacts} contact(s), no reply`);
+  return s.contacts === 0
+    ? d("overdue_no_engagement", "overdue, not yet contacted")
+    : d("overdue_unresponsive", `${s.contacts} contact(s), no reply`);
 }

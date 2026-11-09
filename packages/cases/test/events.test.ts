@@ -21,7 +21,11 @@ describe.skipIf(!hasTestDb)("event processing: subscription payment failed", () 
       event_type: "BILLING.SUBSCRIPTION.PAYMENT.FAILED",
       resource: {
         id: subscriptionId,
-        subscriber: { payer_id: payerId, email_address: `${payerId}@example.com`, name: { given_name: "Ada", surname: "Lovelace" } },
+        subscriber: {
+          payer_id: payerId,
+          email_address: `${payerId}@example.com`,
+          name: { given_name: "Ada", surname: "Lovelace" },
+        },
         billing_info: {
           outstanding_balance: { currency_code: "USD", value },
           last_failed_payment: { amount: { currency_code: "USD", value }, reason_code: "PAYER_CANNOT_PAY" },
@@ -42,7 +46,10 @@ describe.skipIf(!hasTestDb)("event processing: subscription payment failed", () 
   }
 
   const openCases = (ref: string) =>
-    h.db.select().from(cases).where(and(eq(cases.paypalRef, ref), isNull(cases.closedAt)));
+    h.db
+      .select()
+      .from(cases)
+      .where(and(eq(cases.paypalRef, ref), isNull(cases.closedAt)));
 
   it("opens a subscription case with the customer and amount at risk, and links the event", async () => {
     const sub = `I-T${randomUUID().slice(0, 8).toUpperCase()}`;
@@ -51,7 +58,13 @@ describe.skipIf(!hasTestDb)("event processing: subscription payment failed", () 
     await processPendingEvents(h.db);
 
     const [kase] = await openCases(sub);
-    expect(kase).toMatchObject({ lane: "subscription", amountCents: 4900, currency: "USD", state: "detected", simulated: true });
+    expect(kase).toMatchObject({
+      lane: "subscription",
+      amountCents: 4900,
+      currency: "USD",
+      state: "detected",
+      simulated: true,
+    });
     const [customer] = await h.db.select().from(customers).where(eq(customers.id, kase!.customerId));
     expect(customer).toMatchObject({ paypalPayerRef: payer, name: "Ada Lovelace" });
     const [event] = await h.db.select().from(events).where(eq(events.paypalEventId, eventId));
@@ -73,14 +86,26 @@ describe.skipIf(!hasTestDb)("event processing: subscription payment failed", () 
   it("is safe to run from two processes at once", async () => {
     const sub = `I-T${randomUUID().slice(0, 8).toUpperCase()}`;
     const payer = `P${randomUUID().slice(0, 10)}`;
-    await Promise.all([storeFailure(sub, payer, "10.00"), storeFailure(sub, payer, "10.00"), storeFailure(sub, payer, "10.00")]);
+    await Promise.all([
+      storeFailure(sub, payer, "10.00"),
+      storeFailure(sub, payer, "10.00"),
+      storeFailure(sub, payer, "10.00"),
+    ]);
     await Promise.all([processPendingEvents(h.db), processPendingEvents(h.db)]);
     expect(await openCases(sub)).toHaveLength(1);
   });
 
   it("marks event types with no handler as processed, linked to no case", async () => {
     const id = `WH-${randomUUID()}`;
-    await h.db.insert(events).values({ paypalEventId: id, type: "INVOICING.INVOICE.CREATED", payload: {}, rawBody: "{}", headers: {} });
+    await h.db
+      .insert(events)
+      .values({
+        paypalEventId: id,
+        type: "INVOICING.INVOICE.CREATED",
+        payload: {},
+        rawBody: "{}",
+        headers: {},
+      });
     await processPendingEvents(h.db);
     const [row] = await h.db.select().from(events).where(eq(events.paypalEventId, id));
     expect(row!.processedAt).not.toBeNull();

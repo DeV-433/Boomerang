@@ -133,11 +133,9 @@ export async function approvalRoutes(app: FastifyInstance, deps: AppDeps): Promi
     if (!id.success) return reply.code(400).send({ error: "id must be an approval id" });
     const body = DecisionBody.safeParse(req.body ?? {});
     if (!body.success)
-      return reply
-        .code(400)
-        .send({
-          error: body.error.issues.map((i) => `${i.path.join(".") || "body"}: ${i.message}`).join("; "),
-        });
+      return reply.code(400).send({
+        error: body.error.issues.map((i) => `${i.path.join(".") || "body"}: ${i.message}`).join("; "),
+      });
     const d = body.data;
 
     const [row] = await db

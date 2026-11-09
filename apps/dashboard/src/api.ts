@@ -9,6 +9,8 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** Itemised problems the API returned (for example message-lint issues). */
+    readonly issues?: string[],
   ) {
     super(message);
     this.name = "ApiError";
@@ -50,13 +52,15 @@ export async function api<T>(
   if (res.status === 401 && path.startsWith("/api/")) setToken(null);
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`;
+    let issues: string[] | undefined;
     try {
-      const body = (await res.json()) as { error?: string; message?: string };
+      const body = (await res.json()) as { error?: string; message?: string; issues?: string[] };
       message = body.error ?? body.message ?? message;
+      issues = Array.isArray(body.issues) ? body.issues : undefined;
     } catch {
       // not JSON
     }
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, message, issues);
   }
   return (await res.json()) as T;
 }

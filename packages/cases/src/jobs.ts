@@ -13,10 +13,16 @@ type ClaimedJob = Record<string, unknown> & {
  * several workers can run this safely. Only checks the loop is allowed to act on are claimed:
  * never control-arm cases, and a seeded batch's cases only after the batch has been started.
  */
-export async function runDueJobs(deps: LoopDeps, options: { limit?: number; caseIds?: string[] } = {}): Promise<CheckResult[]> {
+export async function runDueJobs(
+  deps: LoopDeps,
+  options: { limit?: number; caseIds?: string[] } = {},
+): Promise<CheckResult[]> {
   const now = (deps.now ?? (() => new Date()))();
   const onlyCases = options.caseIds?.length
-    ? sql`and c.id in (${sql.join(options.caseIds.map((id) => sql`${id}::uuid`), sql`, `)})`
+    ? sql`and c.id in (${sql.join(
+        options.caseIds.map((id) => sql`${id}::uuid`),
+        sql`, `,
+      )})`
     : sql``;
   const claimed = await deps.db.execute<ClaimedJob>(sql`
     update jobs set status = 'running', attempts = jobs.attempts + 1
@@ -40,7 +46,10 @@ export async function runDueJobs(deps: LoopDeps, options: { limit?: number; case
     try {
       const result = await runCaseCheck(deps, job.case_id);
       results.push(result);
-      await deps.db.update(jobs).set({ status: "done", finishedAt: sql`now()` }).where(eq(jobs.id, job.id));
+      await deps.db
+        .update(jobs)
+        .set({ status: "done", finishedAt: sql`now()` })
+        .where(eq(jobs.id, job.id));
     } catch (error) {
       const message = (error as Error).message;
       deps.logger?.error({ caseId: job.case_id, err: error }, "case check failed");
