@@ -58,7 +58,13 @@ async function openCaseFor(tx: Tx, lane: "invoice" | "subscription", ref: string
 async function observed(ctx: Ctx, caseId: string, data: Record<string, unknown>) {
   await writeAudit(ctx.tx, {
     caseId,
-    actor: ctx.event.simulated ? "simulator" : ctx.event.source === "poll" ? "poller" : "paypal",
+    actor: ctx.event.simulated
+      ? "simulator"
+      : ctx.event.source === "poll"
+        ? "poller"
+        : ctx.event.source === "paypage"
+          ? "customer:paypage"
+          : "paypal",
     kind: "event_received",
     data: {
       eventId: ctx.event.paypalEventId,

@@ -11,7 +11,7 @@ import {
   renderMessage,
 } from "@boomerang/cases";
 import { lintMessage, payLinkExpiry, signPayLink, verifyPayLink } from "@boomerang/core";
-import { cases, customers, events, jobs, type DbHandle } from "@boomerang/db";
+import { auditLog, cases, customers, events, jobs, type DbHandle } from "@boomerang/db";
 import { hasTestDb, setupTestDb } from "@boomerang/db/testing";
 import { buildApp } from "../src/app";
 
@@ -129,6 +129,11 @@ describe.skipIf(!hasTestDb)("self-serve pay-or-promise page (7C.1 to 7C.6)", () 
     });
 
     await processPendingEvents(h.db, { now: () => NOW });
+    const [received] = await h.db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.caseId, c.id), eq(auditLog.kind, "event_received")));
+    expect(received!.actor).toBe("customer:paypage");
     const [after] = await h.db.select().from(cases).where(eq(cases.id, c.id));
     expect(after!.promiseDate).toBe("2026-11-17");
     expect(
