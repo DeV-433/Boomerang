@@ -112,7 +112,7 @@ export function Audit() {
       {
         field: "at",
         headerName: "When",
-        width: 210,
+        width: 245,
         cellRenderer: "agGroupCellRenderer",
         valueFormatter: when,
         sortable: true,
@@ -179,7 +179,7 @@ export function Audit() {
           detailCellRendererParams={{
             detailGridOptions: {
               columnDefs: detailColumns,
-              defaultColDef: { resizable: true },
+              defaultColDef: { resizable: true, suppressHeaderMenuButton: true },
               tooltipShowDelay: 300,
               domLayout: "autoHeight",
             },
