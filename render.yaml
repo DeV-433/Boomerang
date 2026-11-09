@@ -114,3 +114,6 @@ services:
       # Public: baked into the bundle at build time.
       - key: VITE_API_URL
         value: https://boomerang-api-rgd8.onrender.com
+      # AG Grid Enterprise licence key (6.5). Ends up in the browser bundle, but is kept out of the repo.
+      - key: VITE_AG_GRID_LICENSE_KEY
+        sync: false
