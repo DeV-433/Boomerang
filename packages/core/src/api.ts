@@ -130,3 +130,52 @@ export interface CaseGroupsResponse {
   by: CaseGroupField;
   groups: CaseGroup[];
 }
+
+// 6.7 and 6.8: audit ------------------------------------------------------------------------------
+
+export const AUDIT_ENTRY_KINDS = [
+  "event_received",
+  "diagnosed",
+  "proposed",
+  "gated",
+  "approval",
+  "executed",
+  "observed",
+  "closed",
+  "scheduled",
+  "system",
+] as const;
+export type AuditEntryKind = (typeof AUDIT_ENTRY_KINDS)[number];
+
+export interface AuditEntry {
+  id: number;
+  caseId: string | null;
+  at: string;
+  actor: string;
+  kind: AuditEntryKind;
+  data: Record<string, unknown>;
+  hash: string;
+  prevHash: string | null;
+}
+
+/** One row of the audit screen: an entry plus enough of its case to recognise it. */
+export interface AuditListRow extends AuditEntry {
+  paypalRef: string | null;
+  lane: "invoice" | "subscription" | null;
+  caseState: string | null;
+}
+
+export interface AuditListResponse {
+  rows: AuditListRow[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export interface CaseAuditResponse {
+  caseId: string;
+  paypalRef: string;
+  state: string;
+  /** The case's whole trail, oldest first (chain order). */
+  entries: AuditEntry[];
+}

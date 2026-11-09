@@ -4,6 +4,7 @@ import { api, API_URL, setToken, type Health } from "./api";
 import { useToken } from "./auth";
 import { Placeholder } from "./pages/Placeholder";
 import { SignIn } from "./pages/SignIn";
+import { Audit } from "./pages/Audit";
 import { Cases } from "./pages/Cases";
 import { Summary } from "./pages/Summary";
 
@@ -62,7 +63,7 @@ export function App() {
             <Route path="/" element={<Summary />} />
             <Route path="/cases" element={<Cases />} />
             <Route path="/approvals" element={<Placeholder title="Approvals" step="6.10" />} />
-            <Route path="/audit" element={<Placeholder title="Audit" step="6.8" />} />
+            <Route path="/audit" element={<Audit />} />
             <Route path="*" element={<Placeholder title="Not found" />} />
           </Routes>
         )}
