@@ -56,7 +56,8 @@ export async function saveRun(
     seed: string;
     config: SimConfig;
     results: CaseResult[];
-    metrics: ArmMetrics;
+    // Extra fields (escalations, model usage) may be stored alongside the arm metrics.
+    metrics: ArmMetrics | (ArmMetrics & Record<string, unknown>);
   },
 ): Promise<string> {
   return db.transaction(async (tx) => {

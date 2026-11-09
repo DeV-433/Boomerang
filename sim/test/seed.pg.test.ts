@@ -72,8 +72,8 @@ describe.skipIf(!hasTestDb)("seeding a batch end to end (3.3 to 3.5, 3.7)", () =
     const simConfig = parseSimConfig(batch.simConfig);
     const control = await loadSimCases(h.db, batch.id, "control");
     const run = () => simulateArm(simConfig, new Rng(batch.seed), control, baselineStrategy(simConfig));
-    const results = run();
-    expect(JSON.stringify(run())).toBe(JSON.stringify(results));
+    const results = await run();
+    expect(JSON.stringify(await run())).toBe(JSON.stringify(results));
     const metrics = computeMetrics(results);
     expect(metrics.cases).toBe(control.length);
     expect(metrics.recoveredCents).toBeGreaterThan(0);

@@ -20,7 +20,8 @@
     "@boomerang/paypal": "*",
     "@boomerang/cases": "*",
     "drizzle-orm": "0.45.4",
-    "@boomerang/policy": "*"
+    "@boomerang/policy": "*",
+    "@boomerang/agent": "*"
   },
   "devDependencies": {
     "@types/seedrandom": "3.0.8",

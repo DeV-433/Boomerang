@@ -31,6 +31,8 @@ export interface Usage {
 }
 
 export interface ModelResponse {
+  /** The model that actually answered (the fallback, if the primary was unavailable). */
+  model: string;
   text: string;
   usage: Usage;
   latencyMs: number;
@@ -48,12 +50,22 @@ export interface ModelClient {
  */
 export const PRICES: Record<string, { input: number; output: number; note?: string }> = {
   "gemini-3.8-flash": { input: 0.75, output: 3.75, note: "until 2026-12-31; $1.50 / $7.50 from 2027-01-01" },
+  "gemini-3.6-flash": { input: 0.75, output: 3.75, note: "until 2026-12-31; $1.50 / $7.50 from 2027-01-01" },
   "gemini-3.5-flash-lite": { input: 0.3, output: 2.5 },
 };
 
-export const DECISION_MODEL = "gemini-3.8-flash";
-export const DRAFT_MODEL = "gemini-3.8-flash";
+/**
+ * Model choice, measured 2026-11-09: gemini-3.8-flash was overloaded (503 "high demand", or no
+ * answer in 45 s) and rejects thinking level MINIMAL; gemini-3.6-flash answered a decision in
+ * about 1.8 s and gemini-3.5-flash-lite in about 0.9 s. Each call falls back to FALLBACK_MODEL
+ * when its primary is unavailable or slow.
+ */
+export const DECISION_MODEL = "gemini-3.6-flash";
+export const DRAFT_MODEL = "gemini-3.5-flash-lite";
 export const CLASSIFY_MODEL = "gemini-3.5-flash-lite";
+export const FALLBACK_MODEL = "gemini-3.5-flash-lite";
+/** A call that has not answered by now is abandoned and retried (or sent to the fallback model). */
+export const CALL_TIMEOUT_MS = 20_000;
 
 export function costUsd(model: string, usage: Usage): number {
   const p = PRICES[model];
@@ -65,53 +77,110 @@ export class ModelCallError extends Error {
   constructor(
     message: string,
     readonly retryable: boolean,
+    /** Set for rate limits: how long the provider asked us to wait. */
+    readonly retryAfterMs: number | null = null,
   ) {
     super(message);
     this.name = "ModelCallError";
   }
 }
 
-/** Gemini through @google/genai, with backoff on rate limits and server errors. */
+/**
+ * Gemini through @google/genai. Each call has a hard timeout. Overload (429, 503), server errors
+ * and timeouts are retried once on the requested model, then sent to the fallback model.
+ */
 export class GeminiClient implements ModelClient {
   private readonly ai: GoogleGenAI;
   constructor(
     apiKey: string,
-    private readonly options: { maxAttempts?: number; sleep?: (ms: number) => Promise<void> } = {},
+    private readonly options: {
+      fallbackModel?: string | null;
+      timeoutMs?: number;
+      attemptsPerModel?: number;
+      /** Requests per minute allowed per model; calls queue to stay under it (GEMINI_RPM). */
+      rpm?: number;
+      sleep?: (ms: number) => Promise<void>;
+    } = {},
   ) {
     this.ai = new GoogleGenAI({ apiKey });
   }
 
+  /** Per-model time of the next free request slot, for client-side rate limiting. */
+  private readonly nextSlot = new Map<string, number>();
+
+  private async throttle(model: string): Promise<void> {
+    const rpm = this.options.rpm;
+    if (!rpm) return;
+    const gap = 60_000 / rpm;
+    const now = Date.now();
+    const slot = Math.max(now, this.nextSlot.get(model) ?? 0);
+    this.nextSlot.set(model, slot + gap);
+    if (slot > now) await (this.options.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms))))(slot - now);
+  }
+
   async generate(req: ModelRequest): Promise<ModelResponse> {
-    const maxAttempts = this.options.maxAttempts ?? 4;
+    const fallback = this.options.fallbackModel === undefined ? FALLBACK_MODEL : this.options.fallbackModel;
+    const models = [req.model, ...(fallback && fallback !== req.model ? [fallback] : [])];
+    const attemptsPerModel = this.options.attemptsPerModel ?? 2;
     const sleep = this.options.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
-    for (let attempt = 1; ; attempt++) {
-      const started = Date.now();
-      try {
-        const res = await this.ai.models.generateContent({
-          model: req.model,
-          contents: req.input,
-          config: {
-            systemInstruction: req.system,
-            temperature: 0,
-            responseMimeType: "application/json",
-            responseJsonSchema: req.jsonSchema,
-            thinkingConfig: { thinkingLevel: req.thinking === "LOW" ? ThinkingLevel.LOW : ThinkingLevel.MINIMAL },
-            // Deliberately no `tools`: the model can only answer, never act.
-          },
-        });
-        const u = res.usageMetadata ?? {};
-        return {
-          text: res.text ?? "",
-          usage: { inputTokens: u.promptTokenCount ?? 0, outputTokens: u.candidatesTokenCount ?? 0, thinkingTokens: u.thoughtsTokenCount ?? 0 },
-          latencyMs: Date.now() - started,
-          cached: false,
-        };
-      } catch (error) {
-        const status = (error as { status?: number }).status;
-        const retryable = status === 429 || (status !== undefined && status >= 500) || status === undefined;
-        if (!retryable || attempt >= maxAttempts) throw new ModelCallError(`${req.model} ${req.kind} failed: ${(error as Error).message.slice(0, 300)}`, retryable);
-        await sleep(Math.min(16_000, 1000 * 2 ** (attempt - 1)) + Math.floor(Math.random() * 250));
+    let lastError: ModelCallError | null = null;
+    for (const model of models) {
+      let rateLimitWaits = 0;
+      for (let attempt = 1; attempt <= attemptsPerModel; attempt++) {
+        try {
+          await this.throttle(model);
+          return await this.once(model, req);
+        } catch (error) {
+          lastError = error instanceof ModelCallError ? error : new ModelCallError(String(error), true);
+          if (!lastError.retryable) throw lastError;
+          // A per-minute rate limit says when to come back: wait that long (up to 3 times, 60 s each)
+          // and try the same model again without using up an attempt.
+          if (lastError.retryAfterMs !== null && rateLimitWaits < 3) {
+            rateLimitWaits++;
+            attempt--;
+            await sleep(Math.min(60_000, lastError.retryAfterMs) + 250);
+            continue;
+          }
+          if (attempt < attemptsPerModel) await sleep(800 * attempt + Math.floor(Math.random() * 200));
+        }
       }
+    }
+    throw lastError ?? new ModelCallError("no model answered", true);
+  }
+
+  private async once(model: string, req: ModelRequest): Promise<ModelResponse> {
+    const started = Date.now();
+    try {
+      const res = await this.ai.models.generateContent({
+        model,
+        contents: req.input,
+        config: {
+          systemInstruction: req.system,
+          temperature: 0,
+          responseMimeType: "application/json",
+          responseJsonSchema: req.jsonSchema,
+          thinkingConfig: { thinkingLevel: req.thinking === "LOW" ? ThinkingLevel.LOW : ThinkingLevel.MINIMAL },
+          abortSignal: AbortSignal.timeout(this.options.timeoutMs ?? CALL_TIMEOUT_MS),
+          // Deliberately no `tools`: the model can only answer, never act.
+        },
+      });
+      const u = res.usageMetadata ?? {};
+      return {
+        model,
+        text: res.text ?? "",
+        usage: { inputTokens: u.promptTokenCount ?? 0, outputTokens: u.candidatesTokenCount ?? 0, thinkingTokens: u.thoughtsTokenCount ?? 0 },
+        latencyMs: Date.now() - started,
+        cached: false,
+      };
+    } catch (error) {
+      const e = error as { status?: number; name?: string; message?: string };
+      const timedOut = e.name === "TimeoutError" || e.name === "AbortError" || /abort|timed? ?out/i.test(e.message ?? "");
+      const status = e.status ?? (/"code":\s*(\d{3})/.exec(e.message ?? "")?.[1] ? Number(/"code":\s*(\d{3})/.exec(e.message ?? "")![1]) : undefined);
+      const retryable = timedOut || status === undefined || status === 429 || status >= 500;
+      // Gemini's 429 body carries "retryDelay": "12s" (or "12.5s") for per-minute limits.
+      const delay = /"retryDelay":\s*"(\d+(?:\.\d+)?)s"/.exec(e.message ?? "");
+      const retryAfterMs = status === 429 ? (delay ? Math.ceil(Number(delay[1]) * 1000) : 15_000) : null;
+      throw new ModelCallError(`${model} ${req.kind} ${timedOut ? "timed out" : `failed (${status ?? "no status"})`}: ${(e.message ?? "").slice(0, 200)}`, retryable, retryAfterMs);
     }
   }
 }
@@ -172,22 +241,22 @@ export class RecordingClient implements ModelClient {
       const [hit] = await db
         .select()
         .from(modelCalls)
-        .where(and(eq(modelCalls.kind, req.kind), eq(modelCalls.model, req.model), eq(modelCalls.inputHash, hash), sql`${modelCalls.error} is null`))
+        .where(and(eq(modelCalls.kind, req.kind), eq(modelCalls.inputHash, hash), sql`${modelCalls.error} is null`))
         .orderBy(desc(modelCalls.createdAt))
         .limit(1);
       if (hit?.responseText) {
         const usage = { inputTokens: 0, outputTokens: 0, thinkingTokens: 0 };
-        meter?.record({ kind: req.kind, model: req.model, usage, costUsd: 0, cached: true });
-        return { text: hit.responseText, usage, latencyMs: 0, cached: true };
+        meter?.record({ kind: req.kind, model: hit.model, usage, costUsd: 0, cached: true });
+        return { model: hit.model, text: hit.responseText, usage, latencyMs: 0, cached: true };
       }
     }
     try {
       const res = await this.inner.generate(req);
-      const cost = costUsd(req.model, res.usage);
-      meter?.record({ kind: req.kind, model: req.model, usage: res.usage, costUsd: cost, cached: false });
+      const cost = costUsd(res.model, res.usage);
+      meter?.record({ kind: req.kind, model: res.model, usage: res.usage, costUsd: cost, cached: false });
       await db?.insert(modelCalls).values({
         kind: req.kind,
-        model: req.model,
+        model: res.model,
         promptVersion: req.promptVersion,
         inputHash: hash,
         input: { system: req.system, input: req.input },

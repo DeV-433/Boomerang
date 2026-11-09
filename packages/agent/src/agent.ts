@@ -57,12 +57,13 @@ export async function decide(opts: AgentOptions, s: CaseSnapshot, diagnosis: Dia
       system: DECIDE_SYSTEM,
       input: JSON.stringify({ today: now.toISOString().slice(0, 10), case: summary }) + feedback,
       jsonSchema: decisionJsonSchema(s.lane),
-      thinking: "LOW",
+      thinking: "MINIMAL",
       caseId: s.id,
     };
     const res = await opts.client.generate(req);
-    usage = addUsage(usage, model, res.usage);
+    usage = addUsage(usage, res.model, res.usage);
     meta.attempts = attempt;
+    meta.model = res.model;
     const v = validateDecision(res.text, { caseId: s.id, lane: s.lane });
     await opts.onValidated?.(req, v.ok);
     if (v.ok) {
@@ -76,7 +77,7 @@ export async function decide(opts: AgentOptions, s: CaseSnapshot, diagnosis: Dia
         reason: d.reason,
         confidence: d.confidence,
         nextCheckAfterHours: d.next_check_after_hours,
-        proposedBy: `agent:${model}`,
+        proposedBy: `agent:${res.model}`,
         meta: { ...meta, usage },
       };
       return withDraft(opts, proposal, s, diagnosis);
@@ -92,7 +93,7 @@ export async function decide(opts: AgentOptions, s: CaseSnapshot, diagnosis: Dia
     reason: "The agent returned an invalid decision twice; a person should review this case.",
     confidence: 0,
     nextCheckAfterHours: 0,
-    proposedBy: `agent:${model}`,
+    proposedBy: `agent:${meta.model}`,
     meta: { ...meta, usage },
   };
 }
@@ -123,8 +124,16 @@ async function withDraft(opts: AgentOptions, proposal: Proposal, s: CaseSnapshot
       thinking: "MINIMAL",
       caseId: s.id,
     };
-    const res = await opts.client.generate(req);
-    usage = addUsage(usage, model, res.usage);
+    let res: Awaited<ReturnType<ModelClient["generate"]>>;
+    try {
+      res = await opts.client.generate(req);
+    } catch (error) {
+      if (!(error instanceof ModelCallError)) throw error;
+      // The note is optional: keep the agent's decision and send the approved template as it is.
+      const message = renderMessage(template, s, tone);
+      return { ...proposal, message, meta: { ...proposal.meta, usage, draft: { model, promptVersion: PROMPT_VERSION.draft, personalNote: "", redrafted: false, lintIssues: [`drafting unavailable: ${error.message.slice(0, 120)}`] } } };
+    }
+    usage = addUsage(usage, res.model, res.usage);
     let note = "";
     try {
       const parsed = DraftSchema.safeParse(JSON.parse(res.text));
@@ -136,14 +145,14 @@ async function withDraft(opts: AgentOptions, proposal: Proposal, s: CaseSnapshot
     const lint = lintMessage(message.body, facts);
     await opts.onValidated?.(req, lint.ok);
     if (lint.ok) {
-      return { ...proposal, message, meta: { ...proposal.meta, usage, draft: { model, promptVersion: PROMPT_VERSION.draft, personalNote: note, redrafted: attempt > 1 } } };
+      return { ...proposal, message, meta: { ...proposal.meta, usage, draft: { model: res.model, promptVersion: PROMPT_VERSION.draft, personalNote: note, redrafted: attempt > 1 } } };
     }
     feedback = `\n\nYour note was rejected: ${lint.issues.join("; ")}. Write a note that avoids these problems, or return an empty string.`;
     if (attempt === 2) {
       return {
         ...proposal,
         message,
-        meta: { ...proposal.meta, usage, draft: { model, promptVersion: PROMPT_VERSION.draft, personalNote: note, redrafted: true, lintIssues: lint.issues } },
+        meta: { ...proposal.meta, usage, draft: { model: res.model, promptVersion: PROMPT_VERSION.draft, personalNote: note, redrafted: true, lintIssues: lint.issues } },
       };
     }
   }
@@ -205,7 +214,7 @@ export async function classifyReply(client: ModelClient, text: string, now: Date
   } catch {
     label = "other";
   }
-  return { label, promiseDate, model, promptVersion: PROMPT_VERSION.classify };
+  return { label, promiseDate, model: res.model, promptVersion: PROMPT_VERSION.classify };
 }
 
 function validPromiseDate(date: string | null, now: Date): string | null {

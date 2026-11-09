@@ -1,5 +1,5 @@
-import { diagnose, enabledTools, proposeByRules, type CaseSnapshot } from "@boomerang/cases";
-import { isContactAction, type Action, type Proposal } from "@boomerang/core";
+import { diagnose, enabledTools, messageFacts, proposeByRules, type CaseSnapshot, type Proposer } from "@boomerang/cases";
+import { isContactAction, lintMessage, type Action, type Proposal } from "@boomerang/core";
 import { DEFAULT_POLICY, evaluateGate, type Policy } from "@boomerang/policy";
 import type { Strategy, StrategyView } from "./engine";
 import type { ContactKind } from "./types";
@@ -53,16 +53,27 @@ export interface TreatmentStats {
  * - a hold for approval is approved by the operator the next day;
  * - an approved balance capture is handed to a person (the engine does not model capture success).
  */
-export function rulesStrategy(
-  policy: Policy = { ...DEFAULT_POLICY, mode: "live" },
-): Strategy & { stats: TreatmentStats; decide(view: StrategyView, st: CaseState, now: Date): { contacts: ContactKind[]; recheckAt?: Date } } {
+export function rulesStrategy(policy: Policy = { ...DEFAULT_POLICY, mode: "live" }) {
+  return loopStrategy({ name: "boomerang-rules", proposer: proposeByRules, policy });
+}
+
+/**
+ * The live loop's decision path for any proposer: the rules (4.16) or the agent with rules as
+ * fallback (5.10). Same diagnosis, same gate, same lint; only the proposal differs.
+ */
+export function loopStrategy(options: {
+  name: string;
+  proposer: Proposer;
+  policy?: Policy;
+}): Strategy & { stats: TreatmentStats; decide(view: StrategyView, st: CaseState, now: Date): Promise<{ contacts: ContactKind[]; recheckAt?: Date }> } {
+  const policy = options.policy ?? { ...DEFAULT_POLICY, mode: "live" as const };
   const states = new Map<string, CaseState>();
   const stats: TreatmentStats = { escalated: 0, stopped: 0, heldForApproval: 0, gateBlocks: {} };
 
   return {
-    name: "boomerang-rules",
+    name: options.name,
     stats,
-    contactsFor(view: StrategyView): ContactKind[] {
+    async contactsFor(view: StrategyView): Promise<ContactKind[]> {
       let st = states.get(view.caseId);
       if (!st) {
         st = { nextCheckAt: SIM_EPOCH, ended: null, pendingApproval: null, seenObservations: 0, contactTimes: [] };
@@ -81,7 +92,7 @@ export function rulesStrategy(
       // The engine asks once per simulated day, but a hold can expire later the same day (09:00 in
       // Kolkata is inside the day that starts 10:00 in New York): re-check at that moment.
       for (let pass = 0; pass < 4; pass++) {
-        const result = this.decide(view, st, now);
+        const result = await this.decide(view, st, now);
         if (result.recheckAt && result.recheckAt < dayStart(view.day + 1)) {
           now = result.recheckAt;
           continue;
@@ -90,10 +101,10 @@ export function rulesStrategy(
       }
       return [];
     },
-    decide(view: StrategyView, st: CaseState, now: Date): { contacts: ContactKind[]; recheckAt?: Date } {
+    async decide(view: StrategyView, st: CaseState, now: Date): Promise<{ contacts: ContactKind[]; recheckAt?: Date }> {
       const snapshot = toSnapshot(view, now, st.contactTimes);
       const diagnosis = diagnose(snapshot, now);
-      const proposal = proposeByRules(snapshot, diagnosis, now);
+      const proposal = await options.proposer(snapshot, diagnosis, now);
       const approved = st.pendingApproval !== null && view.day >= st.pendingApproval.day;
       const decision = evaluateGate({
         lane: view.lane,
@@ -106,7 +117,8 @@ export function rulesStrategy(
         customerContactsLast7Days: snapshot.customerContactsLast7Days,
         lastContactAt: snapshot.lastContactAt,
         proposal,
-        messageLint: proposal.message ? { ok: true, issues: [] } : undefined,
+        messageLint: proposal.message ? lintMessage(proposal.message.body, messageFacts(snapshot)) : undefined,
+        redrafted: proposal.meta?.draft?.redrafted ?? false,
         approvedByHuman: approved,
         systemPaused: false,
         enabledTools: enabledTools(view.lane),

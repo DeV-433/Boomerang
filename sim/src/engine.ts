@@ -31,8 +31,8 @@ export interface StrategyView {
 
 export interface Strategy {
   name: string;
-  /** Contacts to send to this case today. Empty means wait. */
-  contactsFor(view: StrategyView): ContactKind[];
+  /** Contacts to send to this case today. Empty means wait. May be async (the agent calls a model). */
+  contactsFor(view: StrategyView): ContactKind[] | Promise<ContactKind[]>;
 }
 
 export type TimelineEntry =
@@ -63,7 +63,7 @@ export interface CaseResult {
  * plus whatever the strategy decides. Pure and deterministic: every random draw is keyed by the
  * case's batch index, the purpose and the day.
  */
-export function simulateCase(config: SimConfig, rng: Rng, simCase: SimCase, strategy: Strategy): CaseResult {
+export async function simulateCase(config: SimConfig, rng: Rng, simCase: SimCase, strategy: Strategy): Promise<CaseResult> {
   const { profile } = simCase;
   const key = `case-${profile.batchIndex}`;
   const type = profile.customerType;
@@ -156,7 +156,7 @@ export function simulateCase(config: SimConfig, rng: Rng, simCase: SimCase, stra
     }
 
     // 4. The strategy's contacts for today.
-    const sends = strategy.contactsFor({
+    const sends = await strategy.contactsFor({
       caseId: simCase.caseId,
       lane: simCase.lane,
       amountCents: simCase.amountCents,
@@ -194,6 +194,27 @@ export function simulateCase(config: SimConfig, rng: Rng, simCase: SimCase, stra
   };
 }
 
-export function simulateArm(config: SimConfig, rng: Rng, cases: readonly SimCase[], strategy: Strategy): CaseResult[] {
-  return cases.map((c) => simulateCase(config, rng, c, strategy));
+/**
+ * Simulates every case of an arm. Cases never affect each other, so they run concurrently (useful
+ * when the strategy waits on a model); results come back in input order either way.
+ */
+export async function simulateArm(
+  config: SimConfig,
+  rng: Rng,
+  cases: readonly SimCase[],
+  strategy: Strategy,
+  options: { concurrency?: number; onCase?: (done: number, total: number) => void } = {},
+): Promise<CaseResult[]> {
+  const results: CaseResult[] = new Array(cases.length);
+  let next = 0;
+  let done = 0;
+  const workers = Array.from({ length: Math.max(1, Math.min(options.concurrency ?? 1, cases.length)) }, async () => {
+    while (next < cases.length) {
+      const i = next++;
+      results[i] = await simulateCase(config, rng, cases[i]!, strategy);
+      options.onCase?.(++done, cases.length);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }

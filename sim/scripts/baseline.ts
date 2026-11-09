@@ -26,7 +26,7 @@ try {
   const simConfig = parseSimConfig(batch.simConfig);
   const cases = await loadSimCases(db.db, batch.id, arm);
   const strategy = baselineStrategy(simConfig);
-  const results = simulateArm(simConfig, new Rng(batch.seed), cases, strategy);
+  const results = await simulateArm(simConfig, new Rng(batch.seed), cases, strategy);
   const metrics = computeMetrics(results);
   const runId = await saveRun(db.db, { batchId: batch.id, arm, strategy: strategy.name, seed: batch.seed, config: simConfig, results, metrics });
 

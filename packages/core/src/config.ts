@@ -18,6 +18,8 @@ const ConfigSchema = z.object({
   PAYPAL_SANDBOX_MERCHANT_EMAIL: optionalString,
   PAYPAL_SANDBOX_CUSTOMER_EMAIL: optionalString,
   GEMINI_API_KEY: optionalString,
+  /** Requests per minute per Gemini model; unset means no client-side limit. */
+  GEMINI_RPM: z.coerce.number().positive().optional(),
   POLICY_MODE: z.enum(["dry_run", "live"]).default("dry_run"),
   PAY_LINK_SECRET: optionalString,
   SIM_WEBHOOK_SECRET: optionalString,

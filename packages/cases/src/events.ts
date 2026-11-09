@@ -275,7 +275,13 @@ export async function processPendingEvents(db: Database, options: { limit?: numb
       const [event] = await tx
         .select()
         .from(events)
-        .where(isNull(events.processedAt))
+        .where(
+          and(
+            isNull(events.processedAt),
+            // A reply that arrived as raw text waits for the classifier (packages/agent) to label it.
+            sql`not (${events.type} = 'BOOMERANG.CUSTOMER.REPLY' and ${events.payload}->'resource'->>'text' is not null and ${events.payload}->'resource'->>'classification' is null)`,
+          ),
+        )
         .orderBy(asc(events.receivedAt))
         .limit(1)
         .for("update", { skipLocked: true });

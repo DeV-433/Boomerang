@@ -1,3 +1,4 @@
+import { agentProposer, classifyPendingReplies, GeminiClient, RecordingClient } from "@boomerang/agent";
 import { pollInvoices, processPendingEvents, runDueJobs, type LoopDeps } from "@boomerang/cases";
 import { createLogger, loadConfig, requireConfig } from "@boomerang/core";
 import { createDb, pingDb } from "@boomerang/db";
@@ -20,7 +21,18 @@ const paypal = createPayPal(config, { db: db.db, logger });
 const TICK_MS = Number(process.env.WORKER_TICK_MS ?? 5_000);
 const POLL_MS = Number(process.env.INVOICE_POLL_MS ?? 5 * 60_000);
 
-const deps: LoopDeps = { db: db.db, gateway: paypal.gateway, logger, mode: config.POLICY_MODE };
+// 5.10: with a Gemini key the agent proposes (rules are the fallback); without one, the rules do.
+const model = config.GEMINI_API_KEY
+  ? new RecordingClient(new GeminiClient(config.GEMINI_API_KEY, { rpm: config.GEMINI_RPM }), { db: db.db, runTag: "worker" })
+  : null;
+const deps: LoopDeps = {
+  db: db.db,
+  gateway: paypal.gateway,
+  logger,
+  mode: config.POLICY_MODE,
+  ...(model ? { proposer: agentProposer({ client: model, onValidated: (req, ok) => model.markValid(req, ok) }) } : {}),
+};
+logger.info({ proposer: model ? "agent (rules fallback)" : "rules" }, "proposer");
 let stopping = false;
 let busy = false;
 let lastPoll = 0;
@@ -30,6 +42,7 @@ async function tick(): Promise<void> {
   busy = true;
   try {
     await pingDb(db.pool);
+    if (model) await classifyPendingReplies(db.db, model, { logger });
     const processed = await processPendingEvents(db.db, { logger });
     if (Date.now() - lastPoll >= POLL_MS) {
       lastPoll = Date.now();

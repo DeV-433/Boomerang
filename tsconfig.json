@@ -9,6 +9,7 @@
     "packages/*/test",
     "packages/*/*.config.ts",
     "packages/*/scripts",
+    "packages/*/evals",
     "sim/src",
     "sim/scripts",
     "sim/test"
