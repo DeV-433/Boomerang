@@ -73,6 +73,23 @@ function RowActions(
           Escalate
         </button>
       )}
+      {!closed && row.lane === "invoice" && (
+        <button
+          disabled={busy}
+          title="Copy this case's signed pay-or-promise link"
+          onClick={async () => {
+            try {
+              const { link } = await api<{ link: string }>(`/api/cases/${row.id}/paylink`);
+              await navigator.clipboard?.writeText(link).catch(() => undefined);
+              window.prompt("Pay-or-promise link for this case (copied):", link);
+            } catch (err) {
+              window.alert((err as Error).message);
+            }
+          }}
+        >
+          Pay link
+        </button>
+      )}
       <button onClick={() => props.openAudit(row.id)}>Audit</button>
     </div>
   );
@@ -210,7 +227,7 @@ export function Cases() {
       {
         colId: "actions",
         headerName: "",
-        width: 230,
+        width: 300,
         pinned: "right",
         sortable: false,
         filter: false,

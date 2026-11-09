@@ -8,7 +8,15 @@ import {
   type CaseRow,
   type CasesResponse,
 } from "@boomerang/core";
-import { escalateCase, setCasePaused, type OperatorResult } from "@boomerang/cases";
+import {
+  escalateCase,
+  loadSnapshot,
+  paymentLink,
+  paypalPayLink,
+  setCasePaused,
+  type OperatorResult,
+} from "@boomerang/cases";
+import { isEndState } from "@boomerang/core";
 import { caseStateEnum, cases, customers, laneEnum } from "@boomerang/db";
 import type { AppDeps } from "../app";
 
@@ -214,6 +222,22 @@ export async function caseRoutes(app: FastifyInstance, deps: AppDeps): Promise<v
       reply,
       await setCasePaused(db, params.data.id, body.data.paused, OPERATOR_ACTOR, body.data.note),
     );
+  });
+
+  // 7C: the case's signed pay-page link, exactly as its reminders carry it (operator only).
+  app.get("/cases/:id/paylink", async (req, reply) => {
+    const params = IdParams.safeParse(req.params);
+    if (!params.success) return reply.code(400).send(badRequest(params.error));
+    const snapshot = await loadSnapshot(db, params.data.id, new Date());
+    if (!snapshot) return reply.code(404).send({ error: "case not found" });
+    const [row] = await db.select({ state: cases.state }).from(cases).where(eq(cases.id, params.data.id));
+    if (row && isEndState(row.state)) return reply.code(409).send({ error: `case is ${row.state}` });
+    const link = paymentLink(snapshot);
+    if (link === paypalPayLink(snapshot))
+      return reply
+        .code(409)
+        .send({ error: "pay-page links are not configured (PAY_LINK_SECRET and PUBLIC_BASE_URL)" });
+    return { link };
   });
 
   app.post("/cases/:id/escalate", async (req, reply) => {

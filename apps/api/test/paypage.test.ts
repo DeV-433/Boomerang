@@ -180,4 +180,29 @@ describe.skipIf(!hasTestDb)("self-serve pay-or-promise page (7C.1 to 7C.6)", () 
     expect(lintMessage(msg.body, messageFacts(s))).toEqual({ ok: true, issues: [] });
     expect((await app.inject({ method: "GET", url: `/pay/${link.split("/pay/")[1]}` })).statusCode).toBe(200);
   });
+
+  it("gives the operator a case's pay link, only when links are configured (operator API)", async () => {
+    const op = await buildApp({
+      db: h,
+      verifier: { verify: async () => ({ verified: false as const, reason: "unused" }) },
+      operatorToken: "op-token",
+      payLinkSecret: SECRET,
+      now: () => NOW,
+    });
+    try {
+      const { c } = await openCase();
+      const auth = { authorization: "Bearer op-token" };
+      expect(
+        (await op.inject({ method: "GET", url: `/api/cases/${c.id}/paylink`, headers: auth })).statusCode,
+      ).toBe(409); // not configured yet
+      configurePayLinks({ secret: SECRET, baseUrl: "https://api.example.com" });
+      const res = await op.inject({ method: "GET", url: `/api/cases/${c.id}/paylink`, headers: auth });
+      expect(res.statusCode).toBe(200);
+      const link = res.json<{ link: string }>().link;
+      expect(verifyPayLink(SECRET, link.split("/pay/")[1]!, NOW)).toMatchObject({ ok: true, caseId: c.id });
+      expect((await op.inject({ method: "GET", url: `/api/cases/${c.id}/paylink` })).statusCode).toBe(401);
+    } finally {
+      await op.close();
+    }
+  });
 });
