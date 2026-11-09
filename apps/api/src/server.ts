@@ -17,7 +17,10 @@ if (!config.PAYPAL_WEBHOOK_ID) {
   logger.warn("PAYPAL_WEBHOOK_ID is not set: every incoming webhook will be rejected until it is");
 }
 
-const app = await buildApp({ db, verifier, logger });
+const simulation =
+  config.PAYPAL_ENVIRONMENT === "SANDBOX" && config.SIM_WEBHOOK_SECRET ? { secret: config.SIM_WEBHOOK_SECRET } : undefined;
+logger.info({ simulatedEvents: Boolean(simulation) }, "simulated event route");
+const app = await buildApp({ db, verifier, logger, simulation });
 
 const shutdown = async (signal: string) => {
   logger.info({ signal }, "shutting down");

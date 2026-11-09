@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "horizonDays": 45,
+  "batch": {
+    "size": 300,
+    "laneMix": { "invoice": 0.6, "subscription": 0.4 },
+    "typeMix": {
+      "invoice": {
+        "would_pay_after_nudge": 0.32,
+        "promises_then_pays": 0.2,
+        "slow_payer": 0.26,
+        "disputer": 0.08,
+        "opts_out": 0.14
+      },
+      "subscription": {
+        "needs_card_update": 0.38,
+        "would_pay_after_nudge": 0.26,
+        "slow_payer": 0.2,
+        "disputer": 0.04,
+        "opts_out": 0.12
+      }
+    },
+    "invoiceAmount": { "medianDollars": 420, "spread": 1.0, "minDollars": 25, "maxDollars": 8000 },
+    "subscriptionPrices": [9.99, 19, 29, 49, 99, 199, 299],
+    "subscriptionPriceWeights": [0.22, 0.2, 0.18, 0.15, 0.13, 0.08, 0.04],
+    "invoiceDaysOverdue": { "min": 3, "max": 40 },
+    "softFailureShare": { "would_pay_after_nudge": 0.85, "slow_payer": 0.5, "disputer": 0.5, "opts_out": 0.6 },
+    "timezones": ["America/New_York", "America/Chicago", "America/Los_Angeles", "Europe/London", "Asia/Kolkata", null]
+  },
+  "responses": {
+    "would_pay_after_nudge": {
+      "default": { "pay": 0.3, "promise": 0.05, "dispute": 0.0, "optOut": 0.01 },
+      "targeted_reminder": { "pay": 0.48, "promise": 0.08, "dispute": 0.0, "optOut": 0.01 },
+      "firm_reminder": { "pay": 0.4, "promise": 0.06, "dispute": 0.01, "optOut": 0.03 },
+      "update_payment_message": { "pay": 0.45, "promise": 0.04, "dispute": 0.0, "optOut": 0.01 },
+      "paypal_failure_notice": { "pay": 0.12, "promise": 0.0, "dispute": 0.0, "optOut": 0.0 }
+    },
+    "needs_card_update": {
+      "default": { "pay": 0.06, "promise": 0.02, "dispute": 0.0, "optOut": 0.02 },
+      "update_payment_message": { "pay": 0.5, "promise": 0.04, "dispute": 0.0, "optOut": 0.02 },
+      "paypal_failure_notice": { "pay": 0.08, "promise": 0.0, "dispute": 0.0, "optOut": 0.0 }
+    },
+    "promises_then_pays": {
+      "default": { "pay": 0.08, "promise": 0.35, "dispute": 0.0, "optOut": 0.01 },
+      "payment_plan_offer": { "pay": 0.12, "promise": 0.6, "dispute": 0.0, "optOut": 0.01 },
+      "promise_check": { "pay": 0.55, "promise": 0.2, "dispute": 0.0, "optOut": 0.01 }
+    },
+    "slow_payer": {
+      "default": { "pay": 0.1, "promise": 0.06, "dispute": 0.0, "optOut": 0.02 },
+      "firm_reminder": { "pay": 0.16, "promise": 0.08, "dispute": 0.01, "optOut": 0.03 },
+      "payment_plan_offer": { "pay": 0.12, "promise": 0.22, "dispute": 0.0, "optOut": 0.02 }
+    },
+    "disputer": {
+      "default": { "pay": 0.02, "promise": 0.0, "dispute": 0.3, "optOut": 0.02 },
+      "firm_reminder": { "pay": 0.02, "promise": 0.0, "dispute": 0.5, "optOut": 0.02 }
+    },
+    "opts_out": {
+      "default": { "pay": 0.05, "promise": 0.02, "dispute": 0.01, "optOut": 0.4 },
+      "firm_reminder": { "pay": 0.05, "promise": 0.01, "dispute": 0.02, "optOut": 0.55 }
+    }
+  },
+  "fatigue": { "perPriorContact": 0.85, "optOutIncreasePerPriorContact": 0.02 },
+  "payDelayDays": { "min": 0, "max": 3 },
+  "promise": {
+    "inDays": { "min": 3, "max": 10 },
+    "keepProbability": {
+      "would_pay_after_nudge": 0.85,
+      "needs_card_update": 0.7,
+      "promises_then_pays": 0.8,
+      "slow_payer": 0.55,
+      "disputer": 0.1,
+      "opts_out": 0.3
+    }
+  },
+  "dailySelfPay": {
+    "would_pay_after_nudge": 0.006,
+    "needs_card_update": 0.002,
+    "promises_then_pays": 0.004,
+    "slow_payer": 0.012,
+    "disputer": 0.0,
+    "opts_out": 0.004
+  },
+  "paypalRetry": {
+    "intervalDays": 5,
+    "maxRetriesPerCycle": 2,
+    "paymentFailureThreshold": 3,
+    "softSuccessProbability": 0.45,
+    "afterCardUpdateSuccessProbability": 0.95
+  },
+  "baseline": {
+    "invoiceReminderDays": [0, 3, 7, 14, 21, 28],
+    "subscriptionDunningDays": [1, 7, 14]
+  }
+}

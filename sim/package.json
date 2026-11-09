@@ -7,6 +7,22 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "seed": "tsx scripts/seed.ts",
+    "baseline": "tsx scripts/baseline.ts",
     "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "seedrandom": "3.0.5",
+    "zod": "4.6.7",
+    "@boomerang/core": "*",
+    "@boomerang/db": "*",
+    "@boomerang/paypal": "*",
+    "@boomerang/cases": "*",
+    "drizzle-orm": "0.45.4"
+  },
+  "devDependencies": {
+    "@types/seedrandom": "3.0.8",
+    "@boomerang/api": "*",
+    "fastify": "5.12.8"
   }
 }

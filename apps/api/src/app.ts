@@ -9,6 +9,8 @@ export interface AppDeps {
   db: DbHandle;
   verifier: WebhookVerifier;
   logger?: Logger;
+  /** Enables POST /webhooks/simulated. Set only in the sandbox with SIM_WEBHOOK_SECRET configured. */
+  simulation?: { secret: string };
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {

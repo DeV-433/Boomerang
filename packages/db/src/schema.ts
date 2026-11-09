@@ -8,6 +8,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   real,
   text,
   timestamp,
@@ -49,6 +50,24 @@ export const policyModeEnum = pgEnum("policy_mode", ["dry_run", "live"]);
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 
+// 3.3: seeded experiment batches -----------------------------------------------------------------------
+
+export const batches = pgTable(
+  "batches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    seed: text("seed").notNull(),
+    size: integer("size").notNull(),
+    /** "sandbox" creates real PayPal invoices; "offline" uses simulated ids only. */
+    mode: text("mode").notNull(),
+    /** Simulator configuration in force when the batch was generated. */
+    simConfig: jsonb("sim_config").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("batches_seed_size_mode").on(t.seed, t.size, t.mode)],
+);
+
 // 1.4: customers, cases, events -----------------------------------------------------------------------
 
 export const customers = pgTable("customers", {
@@ -84,6 +103,8 @@ export const cases = pgTable(
     experimentGroup: experimentGroupEnum("experiment_group"),
     /** A reopened issue creates a new case linked to the old one, because end states are final. */
     parentCaseId: uuid("parent_case_id").references((): AnyPgColumn => cases.id),
+    /** Seeded experiment batch this case belongs to (null for organic cases). */
+    batchId: uuid("batch_id").references((): AnyPgColumn => batches.id),
     paused: boolean("paused").notNull().default(false),
     simulated: boolean("simulated").notNull().default(false),
     openedAt: timestamp("opened_at", { withTimezone: true }).notNull().defaultNow(),
@@ -222,3 +243,55 @@ export const paypalCalls = pgTable("paypal_calls", {
   claimedAt: timestamp("claimed_at", { withTimezone: true }).notNull().defaultNow(),
   completedAt: timestamp("completed_at", { withTimezone: true }),
 });
+
+// 3.x: simulator ground truth and results ------------------------------------------------------------
+// The decision loop must never read sim_profiles: it is the hidden customer behaviour the simulator plays.
+
+export const simProfiles = pgTable("sim_profiles", {
+  caseId: uuid("case_id")
+    .primaryKey()
+    .references(() => cases.id),
+  batchId: uuid("batch_id")
+    .notNull()
+    .references(() => batches.id),
+  /** Position in the generated batch; keys the case's random streams so runs are reproducible. */
+  batchIndex: integer("batch_index").notNull(),
+  customerType: text("customer_type").notNull(),
+  /** Subscription lane only: "soft" (may clear on retry) or "hard" (needs a new payment method). */
+  failureKind: text("failure_kind"),
+  hidden: jsonb("hidden").notNull(),
+});
+
+export const simRuns = pgTable("sim_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  batchId: uuid("batch_id")
+    .notNull()
+    .references(() => batches.id),
+  arm: experimentGroupEnum("arm").notNull(),
+  strategy: text("strategy").notNull(),
+  seed: text("seed").notNull(),
+  simConfig: jsonb("sim_config").notNull(),
+  metrics: jsonb("metrics"),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+});
+
+export const simCaseResults = pgTable(
+  "sim_case_results",
+  {
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => simRuns.id),
+    caseId: uuid("case_id")
+      .notNull()
+      .references(() => cases.id),
+    outcome: text("outcome").notNull(),
+    amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
+    recoveredCents: bigint("recovered_cents", { mode: "number" }).notNull(),
+    recoveredDay: integer("recovered_day"),
+    contacts: integer("contacts").notNull(),
+    contactsAfterOptOut: integer("contacts_after_opt_out").notNull(),
+    timeline: jsonb("timeline").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.runId, t.caseId] })],
+);

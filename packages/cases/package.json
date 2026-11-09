@@ -1,0 +1,17 @@
+{
+  "name": "@boomerang/cases",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@boomerang/core": "*",
+    "@boomerang/db": "*",
+    "drizzle-orm": "0.45.4"
+  }
+}

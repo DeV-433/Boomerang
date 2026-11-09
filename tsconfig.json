@@ -10,6 +10,7 @@
     "packages/*/*.config.ts",
     "packages/*/scripts",
     "sim/src",
+    "sim/scripts",
     "sim/test"
   ]
 }

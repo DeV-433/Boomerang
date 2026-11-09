@@ -1,4 +1,5 @@
 import { createLogger, loadConfig, requireConfig } from "@boomerang/core";
+import { processPendingEvents } from "@boomerang/cases";
 import { createDb, pingDb } from "@boomerang/db";
 import { assertToolkitReady, createPayPal } from "@boomerang/paypal";
 
@@ -15,13 +16,15 @@ logger.info({ toolkitVersion: toolkit.version, enabled: toolkit.enabled }, "PayP
 // The gateway is used by the overdue poller (4.4) and executor (4.12).
 export const paypal = createPayPal(config, { db: db.db, logger });
 
-const TICK_MS = 60_000;
+/** How often stored events are turned into cases. */
+const TICK_MS = 5_000;
 let stopping = false;
 
 async function tick(): Promise<void> {
   try {
     await pingDb(db.pool);
-    logger.debug("worker tick");
+    const processed = await processPendingEvents(db.db, { logger });
+    if (processed > 0) logger.info({ processed }, "events processed");
   } catch (err) {
     logger.error({ err }, "worker tick failed");
   }

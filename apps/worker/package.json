@@ -14,6 +14,7 @@
   "dependencies": {
     "@boomerang/core": "*",
     "@boomerang/db": "*",
-    "@boomerang/paypal": "*"
+    "@boomerang/paypal": "*",
+    "@boomerang/cases": "*"
   }
 }
