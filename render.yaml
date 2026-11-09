@@ -37,7 +37,8 @@ services:
       - key: PAYPAL_ENVIRONMENT
         value: SANDBOX
       - key: POLICY_MODE
-        value: dry_run
+        # Set in the Render dashboard (dry_run or live); the code defaults to dry_run if unset.
+        sync: false
       - key: PAYPAL_CLIENT_ID
         sync: false
       - key: PAYPAL_CLIENT_SECRET
