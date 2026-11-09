@@ -67,3 +67,66 @@ export interface SummaryResponse {
   };
   system: { paused: boolean; mode: "dry_run" | "live" };
 }
+
+// 6.4: cases ----------------------------------------------------------------------------------------
+
+export const CASE_SORT_FIELDS = [
+  "openedAt",
+  "amountCents",
+  "recoveredCents",
+  "state",
+  "cause",
+  "stage",
+  "lastContactAt",
+  "nextCheckAt",
+  "lane",
+  "customer",
+] as const;
+export type CaseSortField = (typeof CASE_SORT_FIELDS)[number];
+export const CASE_GROUP_FIELDS = ["cause", "state", "lane", "arm"] as const;
+export type CaseGroupField = (typeof CASE_GROUP_FIELDS)[number];
+
+export interface CaseRow {
+  id: string;
+  paypalRef: string;
+  lane: "invoice" | "subscription";
+  customer: string | null;
+  customerEmail: string | null;
+  amountCents: number;
+  currency: string;
+  cause: string | null;
+  state: string;
+  stage: number;
+  contacts: number;
+  lastContactAt: string | null;
+  nextCheckAt: string | null;
+  recoveredCents: number;
+  arm: "control" | "treatment" | null;
+  batchId: string | null;
+  paused: boolean;
+  simulated: boolean;
+  openedAt: string;
+  closedAt: string | null;
+  closedReason: string | null;
+}
+
+export interface CasesResponse {
+  rows: CaseRow[];
+  /** Matching cases across all pages. */
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export interface CaseGroup {
+  /** The group's value (null for cases with no cause yet). */
+  key: string | null;
+  cases: number;
+  amountCents: number;
+  recoveredCents: number;
+}
+
+export interface CaseGroupsResponse {
+  by: CaseGroupField;
+  groups: CaseGroup[];
+}

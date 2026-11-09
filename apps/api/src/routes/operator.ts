@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { AppDeps } from "../app";
+import { caseRoutes } from "./cases";
 import { summaryRoutes } from "./summary";
 
 function digest(value: string): Buffer {
@@ -32,4 +33,5 @@ export async function operatorRoutes(
       return reply.code(401).send({ error: "missing or wrong operator token" });
   });
   await app.register(summaryRoutes, deps);
+  await app.register(caseRoutes, deps);
 }
