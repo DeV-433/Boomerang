@@ -4,6 +4,9 @@
  *   npm run sim:treatment -- [--batch latest|<id>] [--proposer rules|agent] [--concurrency 6]
  * The agent run records every model call in model_calls and reuses cached answers, so a re-run is
  * free and gives the same decisions.
+ * An agent run stops at the first fallback to the rules (quota spent, provider down) so its result
+ * is never a silent mix of agent and rule decisions; re-run later and the cache picks up where it
+ * stopped. --allow-rules-fallback lets such a run finish and reports how many decisions fell back.
  */
 import { agentProposer, GroqClient, RecordingClient, UsageMeter } from "@boomerang/agent";
 import { proposeByRules } from "@boomerang/cases";
@@ -32,6 +35,7 @@ try {
   const treatmentCases = await loadSimCases(db.db, batch.id, "treatment");
   const which = arg("proposer", "rules") as "rules" | "agent";
   const meter = new UsageMeter();
+  const proposalSources: Record<string, number> = {};
   let proposer = proposeByRules as Parameters<typeof loopStrategy>[0]["proposer"];
   if (which === "agent") {
     const client = new RecordingClient(new GroqClient(requireConfig(config, "GROQ_API_KEY"), { rpm: config.GROQ_RPM }), {
@@ -40,7 +44,17 @@ try {
       runTag: `sim:${batch.seed}:treatment:agent`,
       meter,
     });
-    proposer = agentProposer({ client, onValidated: (req, ok) => client.markValid(req, ok) });
+    const agent = agentProposer({ client, onValidated: (req, ok) => client.markValid(req, ok) });
+    const allowFallback = process.argv.includes("--allow-rules-fallback");
+    proposer = async (s, diagnosis, now) => {
+      const p = await agent(s, diagnosis, now);
+      const source = p.proposedBy === "rules (agent fallback)" ? "rules fallback" : p.proposedBy === "rules" ? "rules (clear-cut)" : String(p.meta?.model ?? p.proposedBy);
+      proposalSources[source] = (proposalSources[source] ?? 0) + 1;
+      if (source === "rules fallback" && !allowFallback) {
+        throw new Error(`agent fell back to the rules (${String(p.meta?.fallback).slice(0, 300)}). Stopped so the result is not a mix; re-run later and cached answers are reused.`);
+      }
+      return p;
+    };
   }
   const strategy = loopStrategy({ name: which === "agent" ? "boomerang-agent" : "boomerang-rules", proposer });
   const started = Date.now();
@@ -97,6 +111,7 @@ try {
     console.log(`\n  model calls: ${t.all.calls} (${t.all.cachedCalls} answered from cache), tokens in ${t.all.inputTokens}, out ${t.all.outputTokens}, thinking ${t.all.thinkingTokens}`);
     for (const [kind, k] of Object.entries(t.byKind)) console.log(`    ${kind.padEnd(9)} ${k.calls} calls, $${k.costUsd.toFixed(4)}`);
     const perDollar = cmp.treatment.recoveredCents > 0 ? t.all.costUsd / (cmp.treatment.recoveredCents / 100) : null;
+    console.log(`  proposals by source: ${JSON.stringify(proposalSources)}`);
     console.log(`  model cost: $${t.all.costUsd.toFixed(4)} for the run, $${perDollar?.toFixed(6) ?? "n/a"} per recovered dollar`);
   }
   console.log(`\n  Simulated customers: this reflects the simulator's assumptions (sim/README.md), not real-world proof.`);
