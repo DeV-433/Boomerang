@@ -228,13 +228,13 @@ No cut line: every phase is in scope (decided 2026-11-09, step 0.7).
 
 ### 7C ★ Self-serve pay-or-promise page
 
-- [ ] **7C.1 [M]** Signed link generator: HMAC token with case ID and expiry. *Done when:* a tampered or expired token is rejected.
+- [x] **7C.1 [M]** Signed link generator: HMAC token with case ID and expiry. *Done when:* a tampered or expired token is rejected. _(`packages/core/src/paylink.ts`: token = base64url payload {case id, expiry, version} + HMAC-SHA256 with PAY_LINK_SECRET, constant-time check. Expiry fixed per case (opened + 120 days) so a held message keeps a valid link. Tests: tampered payload or signature, another secret, junk and expired tokens are refused.)_
 - [ ] **7C.2 [M]** Public route `GET /pay/:token` showing amount, reference and merchant name, with no other personal data. *Done when:* the page loads with a valid token only.
 - [ ] **7C.3 [M]** Pay-now action using the PayPal payment link or invoice QR. *Done when:* paying in the sandbox fires the paid event and closes the case.
-- [ ] **7C.4 [M]** Promise action: date picker limited by policy (for example, within N days). *Done when:* submitting writes a promise event and sets the next check.
-- [ ] **7C.5 [M]** Page abuse limits: rate limit, one active promise per case, no way to change amounts. *Done when:* repeated submissions are refused.
+- [x] **7C.4 [M]** Promise action: date picker limited by policy (for example, within N days). *Done when:* submitting writes a promise event and sets the next check. _(Date picker limited to today..+14 days (`PAY_PAGE_PROMISE_MAX_DAYS`). A promise becomes a classified `BOOMERANG.CUSTOMER.REPLY` event (source `paypage`, no text); the worker's event processor sets the promise date and schedules the next check. Tested end to end.)_
+- [x] **7C.5 [M]** Page abuse limits: rate limit, one active promise per case, no way to change amounts. *Done when:* repeated submissions are refused. _(`@fastify/rate-limit`: 60 page views and 5 promise submissions per hour per address; one active promise per case (also counts an unprocessed one); the form accepts only a date (an `amount` field is refused); closed cases refuse promises. Tests: second promise 409, out-of-range 400, amount 400, 6th submission 429.)_
 - [ ] **7C.6 [S]** Include the link in message templates. *Done when:* every outgoing reminder carries a working link.
-- [ ] **7C.7 [S]** Simulator support: customers may use the page, with their own pay and promise rates. *Done when:* page-driven outcomes appear in batch results.
+- [x] **7C.7 [S]** Simulator support: customers may use the page, with their own pay and promise rates. *Done when:* page-driven outcomes appear in batch results. _(Simulator `payPage` config (assumed rates per customer type): a customer who would ignore a Boomerang reminder may use its link: invoices pay there, subscribers update their card (PayPal's retry collects), others promise within 14 days. Off for batches stored before 7C (`demo-1` still replays 150/150), on via the what-if toggle or `sim:treatment --pay-page`. Metrics count page uses, payments and promises. `demo-1` what-if: +$6,954.81 (+4.9 points, 95% CI +0.9 to +10.3) under those assumptions.)_
 
 ---
 
