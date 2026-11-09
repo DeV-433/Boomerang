@@ -1,21 +1,21 @@
 import { createLogger, loadConfig, requireConfig } from "@boomerang/core";
 import { createDb } from "@boomerang/db";
-import { PayPalWebhookVerifier, TokenManager } from "@boomerang/paypal";
+import { assertToolkitReady, createPayPal } from "@boomerang/paypal";
 import { buildApp } from "./app";
 
 const config = loadConfig();
 const logger = createLogger({ name: "api", level: config.LOG_LEVEL });
 
 const db = createDb(requireConfig(config, "DATABASE_URL"));
-const tokens = new TokenManager({
-  clientId: requireConfig(config, "PAYPAL_CLIENT_ID"),
-  clientSecret: requireConfig(config, "PAYPAL_CLIENT_SECRET"),
-  environment: config.PAYPAL_ENVIRONMENT,
-});
+const toolkit = assertToolkitReady();
+logger.info(
+  { toolkitVersion: toolkit.version, pinned: toolkit.pinned, installedTools: toolkit.installedTools, enabled: toolkit.enabled },
+  "PayPal Agent Toolkit loaded",
+);
+const { verifier } = createPayPal(config, { db: db.db, logger });
 if (!config.PAYPAL_WEBHOOK_ID) {
   logger.warn("PAYPAL_WEBHOOK_ID is not set: every incoming webhook will be rejected until it is");
 }
-const verifier = new PayPalWebhookVerifier(tokens, config.PAYPAL_WEBHOOK_ID);
 
 const app = await buildApp({ db, verifier, logger });
 

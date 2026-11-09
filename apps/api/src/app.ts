@@ -14,7 +14,6 @@ export interface AppDeps {
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({
     loggerInstance: deps.logger as FastifyBaseLogger | undefined,
-    disableRequestLogging: false,
     trustProxy: true, // Render terminates TLS in front of the service.
   });
 

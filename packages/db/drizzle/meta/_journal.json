@@ -15,6 +15,13 @@
       "when": 1794167506150,
       "tag": "0001_audit_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794219375432,
+      "tag": "0002_paypal_calls",
+      "breakpoints": true
     }
   ]
 }

@@ -199,3 +199,26 @@ export const auditLog = pgTable(
   },
   (t) => [index("audit_log_case_idx").on(t.caseId, t.id)],
 );
+
+// 2.5: outbound PayPal call ledger ---------------------------------------------------------------------
+
+export const paypalCallStatusEnum = pgEnum("paypal_call_status", ["pending", "succeeded", "failed"]);
+
+/**
+ * One row per idempotency key. The key is claimed here before PayPal is called, so the same
+ * logical action (case + action + stage) can never be sent twice, even across retries or workers.
+ */
+export const paypalCalls = pgTable("paypal_calls", {
+  idempotencyKey: text("idempotency_key").primaryKey(),
+  tool: text("tool").notNull(),
+  profile: text("profile").notNull(),
+  request: jsonb("request").notNull(),
+  status: paypalCallStatusEnum("status").notNull().default("pending"),
+  response: jsonb("response"),
+  error: jsonb("error"),
+  attempts: integer("attempts").notNull().default(1),
+  createdAt: createdAt(),
+  /** When the current attempt claimed the key; a stale pending claim (crashed worker) can be retaken. */
+  claimedAt: timestamp("claimed_at", { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+});

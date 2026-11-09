@@ -1,5 +1,6 @@
 import { createLogger, loadConfig, requireConfig } from "@boomerang/core";
 import { createDb, pingDb } from "@boomerang/db";
+import { assertToolkitReady, createPayPal } from "@boomerang/paypal";
 
 /**
  * Long-running worker. Phase 1 only proves it runs and reaches the database; the overdue poller
@@ -8,6 +9,11 @@ import { createDb, pingDb } from "@boomerang/db";
 const config = loadConfig();
 const logger = createLogger({ name: "worker", level: config.LOG_LEVEL });
 const db = createDb(requireConfig(config, "DATABASE_URL"), { max: 2 });
+
+const toolkit = assertToolkitReady();
+logger.info({ toolkitVersion: toolkit.version, enabled: toolkit.enabled }, "PayPal Agent Toolkit loaded");
+// The gateway is used by the overdue poller (4.4) and executor (4.12).
+export const paypal = createPayPal(config, { db: db.db, logger });
 
 const TICK_MS = 60_000;
 let stopping = false;

@@ -1,4 +1,4 @@
-import { PayPalHttpError, type FetchLike } from "./http";
+import { errorFromResponse, type FetchLike } from "./http";
 import type { TokenManager } from "./auth";
 
 /** The transmission headers PayPal attaches to every webhook delivery (lower-cased). */
@@ -60,15 +60,15 @@ export class PayPalWebhookVerifier implements WebhookVerifier {
     const body = buildVerificationBody(headers, rawBody, this.webhookId);
     if (!body) return { verified: false, reason: "missing PayPal transmission headers" };
 
-    const res = await this.fetchFn(`${this.tokens.baseUrl}/v1/notifications/verify-webhook-signature`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${await this.tokens.getToken()}`, "Content-Type": "application/json" },
-      body,
+    const json = await this.tokens.withToken(async (token) => {
+      const res = await this.fetchFn(`${this.tokens.baseUrl}/v1/notifications/verify-webhook-signature`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body,
+      });
+      if (!res.ok) throw await errorFromResponse(res, "webhook verification");
+      return (await res.json()) as { verification_status?: string };
     });
-    if (!res.ok) {
-      throw new PayPalHttpError(res.status, await res.text(), res.headers.get("paypal-debug-id"), "webhook verification");
-    }
-    const json = (await res.json()) as { verification_status?: string };
     return json.verification_status === "SUCCESS"
       ? { verified: true }
       : { verified: false, reason: `verification_status=${json.verification_status ?? "missing"}` };

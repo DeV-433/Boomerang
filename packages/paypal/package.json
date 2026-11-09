@@ -10,6 +10,12 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@boomerang/core": "*"
+    "@boomerang/core": "*",
+    "@boomerang/db": "*",
+    "@paypal/agent-toolkit": "1.11.0",
+    "drizzle-orm": "0.45.4"
+  },
+  "devDependencies": {
+    "msw": "3.0.4"
   }
 }

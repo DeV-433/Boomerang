@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@boomerang/core": "*",
-    "@boomerang/db": "*"
+    "@boomerang/db": "*",
+    "@boomerang/paypal": "*"
   }
 }
