@@ -10,3 +10,4 @@ export { computeMetrics, compareArms, metricsByLane, median, type ArmMetrics, ty
 export { subscriptionFailurePayload, injectSubscriptionFailure, httpPoster, type EventPoster } from "./inject";
 export { seedBatch, type SeedOptions, type SeedSummary } from "./seed";
 export { findBatch, loadSimCases, saveRun } from "./store";
+export { rulesStrategy, contactKindFor, SIM_EPOCH, type TreatmentStats } from "./treatment";

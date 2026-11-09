@@ -9,7 +9,8 @@
   "scripts": {
     "seed": "tsx scripts/seed.ts",
     "baseline": "tsx scripts/baseline.ts",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "treatment": "tsx scripts/treatment.ts"
   },
   "dependencies": {
     "seedrandom": "3.0.5",
@@ -18,7 +19,8 @@
     "@boomerang/db": "*",
     "@boomerang/paypal": "*",
     "@boomerang/cases": "*",
-    "drizzle-orm": "0.45.4"
+    "drizzle-orm": "0.45.4",
+    "@boomerang/policy": "*"
   },
   "devDependencies": {
     "@types/seedrandom": "3.0.8",

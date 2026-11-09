@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, sql } from "drizzle-orm";
-import { batches, cases, simCaseResults, simProfiles, simRuns, type Database } from "@boomerang/db";
+import { batches, cases, customers, simCaseResults, simProfiles, simRuns, type Database } from "@boomerang/db";
 import type { SimConfig } from "./config";
 import type { CaseResult, SimCase } from "./engine";
 import type { ArmMetrics } from "./metrics";
@@ -24,9 +24,12 @@ export async function loadSimCases(db: Database, batchId: string, arm?: "control
       batchIndex: simProfiles.batchIndex,
       customerType: simProfiles.customerType,
       failureKind: simProfiles.failureKind,
+      hidden: simProfiles.hidden,
+      timezone: customers.timezone,
     })
     .from(cases)
     .innerJoin(simProfiles, eq(simProfiles.caseId, cases.id))
+    .innerJoin(customers, eq(customers.id, cases.customerId))
     .where(and(eq(cases.batchId, batchId), arm ? eq(cases.experimentGroup, arm) : sql`true`))
     .orderBy(asc(simProfiles.batchIndex));
   return rows.map((r) => ({
@@ -39,6 +42,8 @@ export async function loadSimCases(db: Database, batchId: string, arm?: "control
       customerType: r.customerType as CustomerType,
       failureKind: (r.failureKind as "soft" | "hard" | null) ?? null,
     },
+    // The reason code came from PayPal's failure event, so a merchant sees it too. Nothing else from `hidden` leaks.
+    visible: { reasonCode: (r.hidden as { reasonCode?: string | null }).reasonCode ?? null, timezone: r.timezone },
   }));
 }
 

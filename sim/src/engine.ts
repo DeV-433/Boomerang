@@ -8,6 +8,8 @@ export interface SimCase {
   lane: Lane;
   amountCents: number;
   profile: SimProfile;
+  /** Facts a merchant can actually see in PayPal (for example the failure reason code). */
+  visible?: { reasonCode?: string | null; timezone?: string | null };
 }
 
 /** What a strategy is allowed to know: things the merchant would actually observe. Never the hidden type. */
@@ -24,6 +26,7 @@ export interface StrategyView {
   contactsSoFar: number;
   lastContactDay: number | null;
   observations: readonly Observation[];
+  visible: { reasonCode?: string | null; timezone?: string | null };
 }
 
 export interface Strategy {
@@ -161,6 +164,7 @@ export function simulateCase(config: SimConfig, rng: Rng, simCase: SimCase, stra
       contactsSoFar: contacts,
       lastContactDay,
       observations,
+      visible: simCase.visible ?? {},
     });
     sends.forEach((kind, n) => {
       contacts++;
