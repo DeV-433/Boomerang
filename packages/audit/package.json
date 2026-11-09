@@ -8,5 +8,9 @@
   },
   "scripts": {
     "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@boomerang/db": "*",
+    "drizzle-orm": "0.45.4"
   }
 }

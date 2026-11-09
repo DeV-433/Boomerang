@@ -1,32 +1,52 @@
+import { pollInvoices, processPendingEvents, runDueJobs, type LoopDeps } from "@boomerang/cases";
 import { createLogger, loadConfig, requireConfig } from "@boomerang/core";
-import { processPendingEvents } from "@boomerang/cases";
 import { createDb, pingDb } from "@boomerang/db";
 import { assertToolkitReady, createPayPal } from "@boomerang/paypal";
+import { DEFAULT_POLICY } from "@boomerang/policy";
 
 /**
- * Long-running worker. Phase 1 only proves it runs and reaches the database; the overdue poller
- * (4.4) and follow-up scheduler (4.14) plug into this loop.
+ * Long-running worker (a cron job is too coarse for follow-up timers):
+ *   every TICK_MS    stored events become case changes (4.3), then due checks run the loop (4.14)
+ *   every POLL_MS    PayPal invoices are listed to find overdue ones (4.4)
  */
 const config = loadConfig();
 const logger = createLogger({ name: "worker", level: config.LOG_LEVEL });
-const db = createDb(requireConfig(config, "DATABASE_URL"), { max: 2 });
+const db = createDb(requireConfig(config, "DATABASE_URL"), { max: 4 });
 
 const toolkit = assertToolkitReady();
 logger.info({ toolkitVersion: toolkit.version, enabled: toolkit.enabled }, "PayPal Agent Toolkit loaded");
-// The gateway is used by the overdue poller (4.4) and executor (4.12).
-export const paypal = createPayPal(config, { db: db.db, logger });
+const paypal = createPayPal(config, { db: db.db, logger });
 
-/** How often stored events are turned into cases. */
-const TICK_MS = 5_000;
+const TICK_MS = Number(process.env.WORKER_TICK_MS ?? 5_000);
+const POLL_MS = Number(process.env.INVOICE_POLL_MS ?? 5 * 60_000);
+
+const deps: LoopDeps = { db: db.db, gateway: paypal.gateway, logger, mode: config.POLICY_MODE };
 let stopping = false;
+let busy = false;
+let lastPoll = 0;
 
 async function tick(): Promise<void> {
+  if (busy || stopping) return; // never overlap ticks
+  busy = true;
   try {
     await pingDb(db.pool);
     const processed = await processPendingEvents(db.db, { logger });
-    if (processed > 0) logger.info({ processed }, "events processed");
+    if (Date.now() - lastPoll >= POLL_MS) {
+      lastPoll = Date.now();
+      try {
+        await pollInvoices({ db: db.db, gateway: paypal.gateway, merchantTimezone: DEFAULT_POLICY.hours.merchantTimezone, logger });
+      } catch (err) {
+        logger.error({ err }, "invoice poll failed");
+      }
+    }
+    const results = await runDueJobs(deps);
+    if (processed > 0 || results.length > 0) {
+      logger.info({ eventsProcessed: processed, checks: results.map((r) => `${r.outcome}${r.detail ? `:${r.detail}` : ""}`) }, "worker tick");
+    }
   } catch (err) {
     logger.error({ err }, "worker tick failed");
+  } finally {
+    busy = false;
   }
 }
 
@@ -43,5 +63,5 @@ async function shutdown(signal: string): Promise<void> {
 process.once("SIGTERM", () => void shutdown("SIGTERM"));
 process.once("SIGINT", () => void shutdown("SIGINT"));
 
+logger.info({ mode: config.POLICY_MODE, tickMs: TICK_MS, pollMs: POLL_MS }, "worker ready");
 await tick();
-logger.info({ mode: config.POLICY_MODE }, "worker ready");

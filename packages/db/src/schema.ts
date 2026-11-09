@@ -64,6 +64,8 @@ export const batches = pgTable(
     /** Simulator configuration in force when the batch was generated. */
     simConfig: jsonb("sim_config").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** The live loop only works a batch's treatment cases after the operator starts the run. */
+    startedAt: timestamp("started_at", { withTimezone: true }),
   },
   (t) => [uniqueIndex("batches_seed_size_mode").on(t.seed, t.size, t.mode)],
 );
@@ -107,6 +109,22 @@ export const cases = pgTable(
     batchId: uuid("batch_id").references((): AnyPgColumn => batches.id),
     paused: boolean("paused").notNull().default(false),
     simulated: boolean("simulated").notNull().default(false),
+    /** Customer-facing messages sent on this case. */
+    contacts: integer("contacts").notNull().default(0),
+    lastContactAt: timestamp("last_contact_at", { withTimezone: true }),
+    nextCheckAt: timestamp("next_check_at", { withTimezone: true }),
+    /** yyyy-MM-dd the customer promised to pay by, if they did. */
+    promiseDate: text("promise_date"),
+    disputed: boolean("disputed").notNull().default(false),
+    /** Latest status PayPal reported for the invoice or subscription. */
+    paypalStatus: text("paypal_status"),
+    /** Invoices: yyyy-MM-dd due date. */
+    dueDate: text("due_date"),
+    /** Subscriptions: failed payments PayPal has reported in this cycle. */
+    failedPayments: integer("failed_payments").notNull().default(0),
+    lastFailureReason: text("last_failure_reason"),
+    /** Why the case reached its end state (gate rule, event, operator). */
+    closeReason: text("close_reason"),
     openedAt: timestamp("opened_at", { withTimezone: true }).notNull().defaultNow(),
     closedAt: timestamp("closed_at", { withTimezone: true }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -295,3 +313,36 @@ export const simCaseResults = pgTable(
   },
   (t) => [primaryKey({ columns: [t.runId, t.caseId] })],
 );
+
+// 4.14: scheduled case checks ----------------------------------------------------------------------------
+
+export const jobStatusEnum = pgEnum("job_status", ["pending", "running", "done", "cancelled", "failed"]);
+
+/** Due work for the worker: "check this case at this time". Cancelled when the case stops. */
+export const jobs = pgTable(
+  "jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    caseId: uuid("case_id")
+      .notNull()
+      .references(() => cases.id),
+    kind: text("kind").notNull(),
+    runAt: timestamp("run_at", { withTimezone: true }).notNull(),
+    status: jobStatusEnum("status").notNull().default("pending"),
+    reason: text("reason"),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    createdAt: createdAt(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [index("jobs_due_idx").on(t.runAt).where(sql`${t.status} = 'pending'`), index("jobs_case_idx").on(t.caseId)],
+);
+
+// Gate rule 4: global kill switch ------------------------------------------------------------------------
+
+export const systemState = pgTable("system_state", {
+  id: integer("id").primaryKey().default(1),
+  paused: boolean("paused").notNull().default(false),
+  pausedBy: text("paused_by"),
+  changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+});

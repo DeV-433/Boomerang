@@ -15,6 +15,7 @@
     "@boomerang/core": "*",
     "@boomerang/db": "*",
     "@boomerang/paypal": "*",
-    "@boomerang/cases": "*"
+    "@boomerang/cases": "*",
+    "@boomerang/policy": "*"
   }
 }

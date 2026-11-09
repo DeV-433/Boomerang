@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { appendAuditEntry } from "../src/audit-chain";
 import { actions, approvals, auditLog, cases, customers, events } from "../src/schema";
 import { hasTestDb, setupTestDb } from "../src/testing";
 import type { DbHandle } from "../src/client";
@@ -81,11 +83,12 @@ describe.skipIf(!hasTestDb)("database schema", () => {
 
   // 1.6
   describe("audit_log", () => {
+    // Entries go through the chain primitive so the shared test database keeps a valid hash chain.
     async function insertEntry() {
-      const [entry] = await h.db
-        .insert(auditLog)
-        .values({ actor: "test", kind: "event_received", data: { n: 1 }, hash: randomUUID() })
-        .returning();
+      const { id } = await h.db.transaction((tx) =>
+        appendAuditEntry(tx, { caseId: null, actor: "test", kind: "event_received", data: { n: 1 } }),
+      );
+      const [entry] = await h.db.select().from(auditLog).where(eq(auditLog.id, id));
       return entry!;
     }
 
@@ -93,10 +96,11 @@ describe.skipIf(!hasTestDb)("database schema", () => {
       const entry = await insertEntry();
       const client = await h.pool.connect();
       try {
+        await client.query("begin");
+        await client.query("set local role boomerang_app");
+        await appendAuditEntry(drizzle(client), { caseId: null, actor: "app", kind: "test", data: {} });
+        await client.query("commit");
         await client.query("set role boomerang_app");
-        await client.query("insert into audit_log (actor, kind, data, hash) values ('app', 'test', '{}', $1)", [
-          randomUUID(),
-        ]);
         const { rowCount } = await client.query("select 1 from audit_log where id = $1", [entry.id]);
         expect(rowCount).toBe(1);
         expect(await pgErrorCode(client.query("update audit_log set actor = 'x' where id = $1", [entry.id]))).toBe(

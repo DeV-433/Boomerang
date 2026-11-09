@@ -1,2 +1,2 @@
-// Append-only, hash-chained audit writer. Must never import the model SDK or the PayPal toolkit.
-export {};
+export { writeAudit, auditedTransaction, AUDIT_KINDS, type AuditKind, type AuditInput } from "./writer";
+export { verifyChain, caseTrail, type ChainVerdict } from "./verify";

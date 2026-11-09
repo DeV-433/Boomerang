@@ -8,3 +8,4 @@ export {
   SIM_SIGNATURE_TOLERANCE_SECONDS,
   type SimVerifyResult,
 } from "./simsign";
+export * from "./domain";

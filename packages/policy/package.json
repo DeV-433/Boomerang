@@ -8,5 +8,8 @@
   },
   "scripts": {
     "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@boomerang/core": "*"
   }
 }
