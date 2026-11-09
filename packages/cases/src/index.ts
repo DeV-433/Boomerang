@@ -5,6 +5,7 @@ export { renderMessage, paymentLink, messageFacts, OPT_OUT_LINE, type TemplateId
 export { runCaseCheck, decideApproval, startBatch, enabledTools, type LoopDeps, type CheckResult, type Proposer } from "./loop";
 export { executeAction, idempotencyKey } from "./executor";
 export { runDueJobs } from "./jobs";
+export { setCasePaused, escalateCase, type OperatorResult } from "./operator";
 export { pollInvoices, todayIn, OPEN_INVOICE_STATUSES, type PollResult } from "./poller";
 export {
   loadSnapshot,

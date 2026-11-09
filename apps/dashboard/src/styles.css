@@ -365,3 +365,38 @@ body {
 .card {
   min-width: 0;
 }
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-bottom: 10px;
+}
+.toolbar input[type="search"] {
+  min-width: 260px;
+  max-width: 100%;
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.hint {
+  font-size: 12px;
+}
+.grid-wrap {
+  height: calc(100vh - 190px);
+  min-height: 420px;
+}
+.row-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  height: 100%;
+}
+.row-actions button {
+  padding: 1px 8px;
+  font-size: 12px;
+  line-height: 20px;
+}

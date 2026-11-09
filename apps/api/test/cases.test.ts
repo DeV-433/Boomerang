@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import type { CaseGroupsResponse, CasesResponse } from "@boomerang/core";
-import { batches, cases, customers, type DbHandle } from "@boomerang/db";
+import { and, desc, eq } from "drizzle-orm";
+import { auditLog, batches, cases, customers, jobs, type DbHandle } from "@boomerang/db";
 import { hasTestDb, setupTestDb } from "@boomerang/db/testing";
 import type { WebhookVerifier } from "@boomerang/paypal";
 import { buildApp } from "../src/app";
@@ -144,5 +145,60 @@ describe.skipIf(!hasTestDb)("dashboard API: cases (6.4, 6.6)", () => {
       (await app.inject({ method: "GET", url: "/api/cases/groups?by=email", headers: auth })).statusCode,
     ).toBe(400);
     expect((await app.inject({ method: "GET", url: "/api/cases" })).statusCode).toBe(401);
+  });
+
+  describe("row actions (6.5)", () => {
+    const post = (url: string, payload: unknown) =>
+      app.inject({ method: "POST", url, headers: auth, payload: payload as object });
+    const openCase = async () =>
+      (await get<CasesResponse>(`/api/cases?batch=${batchId}&state=awaiting&paused=false&limit=1`)).rows[0]!;
+
+    it("pauses and resumes a case, audits both, and schedules a check on resume", async () => {
+      const c = await openCase();
+      const paused = await post(`/api/cases/${c.id}/pause`, { paused: true, note: "customer called" });
+      expect(paused.statusCode).toBe(200);
+      expect(paused.json()).toMatchObject({ ok: true, detail: "paused" });
+      expect((await h.db.select().from(cases).where(eq(cases.id, c.id)))[0]!.paused).toBe(true);
+      const [entry] = await h.db
+        .select()
+        .from(auditLog)
+        .where(eq(auditLog.caseId, c.id))
+        .orderBy(desc(auditLog.id))
+        .limit(1);
+      expect(entry).toMatchObject({
+        actor: "operator",
+        kind: "system",
+        data: { paused: true, note: "customer called" },
+      });
+
+      expect((await post(`/api/cases/${c.id}/pause`, { paused: false })).json()).toMatchObject({
+        detail: "resumed",
+      });
+      const pending = await h.db
+        .select()
+        .from(jobs)
+        .where(and(eq(jobs.caseId, c.id), eq(jobs.status, "pending")));
+      expect(pending).toHaveLength(1);
+    });
+
+    it("escalates a case to a person once; a second escalation is refused", async () => {
+      const c = await openCase();
+      const res = await post(`/api/cases/${c.id}/escalate`, { note: "large account" });
+      expect(res.statusCode).toBe(200);
+      const [row] = await h.db.select().from(cases).where(eq(cases.id, c.id));
+      expect(row).toMatchObject({ state: "escalated", closeReason: "escalated by operator: large account" });
+      expect((await post(`/api/cases/${c.id}/escalate`, {})).statusCode).toBe(409);
+      expect((await post(`/api/cases/${c.id}/pause`, { paused: true })).statusCode).toBe(409);
+    });
+
+    it("validates ids and bodies, and requires the token", async () => {
+      expect((await post(`/api/cases/not-a-uuid/escalate`, {})).statusCode).toBe(400);
+      expect((await post(`/api/cases/${randomUUID()}/escalate`, {})).statusCode).toBe(404);
+      expect((await post(`/api/cases/${randomUUID()}/pause`, { paused: "yes" })).statusCode).toBe(400);
+      expect(
+        (await app.inject({ method: "POST", url: `/api/cases/${randomUUID()}/escalate`, payload: {} }))
+          .statusCode,
+      ).toBe(401);
+    });
   });
 });

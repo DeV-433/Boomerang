@@ -12,6 +12,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@boomerang/cases": "*",
     "@boomerang/core": "*",
     "@boomerang/db": "*",
     "@boomerang/paypal": "*",

@@ -8,6 +8,7 @@ import {
   type CaseRow,
   type CasesResponse,
 } from "@boomerang/core";
+import { escalateCase, setCasePaused, type OperatorResult } from "@boomerang/cases";
 import { caseStateEnum, cases, customers, laneEnum } from "@boomerang/db";
 import type { AppDeps } from "../app";
 
@@ -113,6 +114,12 @@ function badRequest(error: z.ZodError) {
   return { error: error.issues.map((i) => `${i.path.join(".") || "query"}: ${i.message}`).join("; ") };
 }
 
+const IdParams = z.object({ id: z.string().uuid() });
+const PauseBody = z.object({ paused: z.boolean(), note: z.string().trim().max(500).optional() });
+const EscalateBody = z.object({ note: z.string().trim().max(500).optional() });
+/** One operator in this system (section 3 of the project documentation). */
+export const OPERATOR_ACTOR = "operator";
+
 /** Steps 6.4 and 6.6: server-side paging, filtering and sorting of cases, and group totals. */
 export async function caseRoutes(app: FastifyInstance, deps: AppDeps): Promise<void> {
   const db = deps.db.db;
@@ -192,5 +199,28 @@ export async function caseRoutes(app: FastifyInstance, deps: AppDeps): Promise<v
         recoveredCents: Number(g.recoveredCents),
       })),
     };
+  });
+
+  // 6.5 row actions --------------------------------------------------------------------------------
+  const send = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }, r: OperatorResult) =>
+    r.ok ? reply.code(200).send(r) : reply.code(r.status).send({ error: r.error });
+
+  app.post("/cases/:id/pause", async (req, reply) => {
+    const params = IdParams.safeParse(req.params);
+    const body = PauseBody.safeParse(req.body ?? {});
+    if (!params.success) return reply.code(400).send(badRequest(params.error));
+    if (!body.success) return reply.code(400).send(badRequest(body.error));
+    return send(
+      reply,
+      await setCasePaused(db, params.data.id, body.data.paused, OPERATOR_ACTOR, body.data.note),
+    );
+  });
+
+  app.post("/cases/:id/escalate", async (req, reply) => {
+    const params = IdParams.safeParse(req.params);
+    const body = EscalateBody.safeParse(req.body ?? {});
+    if (!params.success) return reply.code(400).send(badRequest(params.error));
+    if (!body.success) return reply.code(400).send(badRequest(body.error));
+    return send(reply, await escalateCase(db, params.data.id, OPERATOR_ACTOR, body.data.note));
   });
 }
