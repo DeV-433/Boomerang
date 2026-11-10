@@ -150,7 +150,9 @@ export async function webhookRoutes(app: FastifyInstance, deps: AppDeps): Promis
   // Exists only in the sandbox with SIM_WEBHOOK_SECRET set; signed with our own HMAC, stored as simulated.
   if (deps.simulation) {
     const { secret } = deps.simulation;
-    app.post("/webhooks/simulated", limited, async (req, reply) => {
+    // Not rate limited: every request must carry our own HMAC within a 5-minute window, so an
+    // unsigned flood fails cheaply, and the seeder legitimately sends hundreds a minute.
+    app.post("/webhooks/simulated", async (req, reply) => {
       const rawBody = typeof req.body === "string" ? req.body : "";
       const header = req.headers[SIM_SIGNATURE_HEADER];
       const check = verifySimulatedEvent(secret, rawBody, Array.isArray(header) ? header[0] : header);
