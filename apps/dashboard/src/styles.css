@@ -715,6 +715,7 @@ body {
   margin: 0;
   padding: 10px;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font: inherit;
 }
 .editor {
