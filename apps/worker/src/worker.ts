@@ -6,7 +6,7 @@ import {
   runDueJobs,
   type LoopDeps,
 } from "@boomerang/cases";
-import { createLogger, loadConfig, requireConfig } from "@boomerang/core";
+import { createLogger, loadConfig, publicBaseUrl, requireConfig } from "@boomerang/core";
 import { createDb, pingDb } from "@boomerang/db";
 import { assertToolkitReady, createPayPal } from "@boomerang/paypal";
 import { DEFAULT_POLICY } from "@boomerang/policy";
@@ -29,8 +29,8 @@ if (offline) logger.warn("offline mode: no PayPal client; every action is a dry 
 
 // 7C.6: reminders link to the signed pay page when both settings are present (same as the API).
 const payLinks =
-  config.PAY_LINK_SECRET && config.PUBLIC_BASE_URL
-    ? { secret: config.PAY_LINK_SECRET, baseUrl: config.PUBLIC_BASE_URL }
+  config.PAY_LINK_SECRET && publicBaseUrl(config)
+    ? { secret: config.PAY_LINK_SECRET, baseUrl: publicBaseUrl(config)! }
     : null;
 configurePayLinks(payLinks);
 logger.info({ payLinksInMessages: Boolean(payLinks) }, "pay links");

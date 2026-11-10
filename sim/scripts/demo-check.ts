@@ -211,9 +211,11 @@ async function runOnce(n: number): Promise<boolean> {
     [
       "★ customer pay page",
       async () => {
-        const link = (await call<{ link: string }>(`/api/cases/${await caseId(DEMO.payPage)}/paylink`)).json
-          .link;
-        const path = new URL(link).pathname;
+        const res0 = await call<{ link?: string; error?: string }>(
+          `/api/cases/${await caseId(DEMO.payPage)}/paylink`,
+        );
+        check(res0.json.link, `pay link: ${res0.json.error ?? res0.status}`);
+        const path = new URL(res0.json.link).pathname;
         const page = await call(path, { auth: false });
         check(page.status === 200 && page.text.includes("75.00"), "pay page shows the $75 invoice");
         const date = new Date(Date.now() + 5 * 86_400_000).toISOString().slice(0, 10);

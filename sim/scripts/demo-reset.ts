@@ -28,7 +28,7 @@ import {
   startBatch,
   type LoopDeps,
 } from "@boomerang/cases";
-import { createLogger, loadConfig, requireConfig } from "@boomerang/core";
+import { createLogger, loadConfig, publicBaseUrl, requireConfig } from "@boomerang/core";
 import { cases, createDb, customers, events, runMigrations } from "@boomerang/db";
 import { eq, sql } from "drizzle-orm";
 import { loadSimConfig, seedBatch, type EventPoster } from "../src/index";
@@ -46,8 +46,8 @@ if (process.env.RENDER_DATABASE_URL && process.env.RENDER_DATABASE_URL === url)
   throw new Error("DATABASE_URL is the Render database; refusing to reset it");
 const logger = createLogger({ name: "demo-reset", level: "warn" });
 // Reminders carry the pay page, as they do from the API and worker when these are set.
-if (config.PAY_LINK_SECRET && config.PUBLIC_BASE_URL)
-  configurePayLinks({ secret: config.PAY_LINK_SECRET, baseUrl: config.PUBLIC_BASE_URL });
+if (config.PAY_LINK_SECRET && publicBaseUrl(config))
+  configurePayLinks({ secret: config.PAY_LINK_SECRET, baseUrl: publicBaseUrl(config)! });
 const started = Date.now();
 const step = (msg: string) =>
   console.log(`  ${((Date.now() - started) / 1000).toFixed(0).padStart(3)}s  ${msg}`);

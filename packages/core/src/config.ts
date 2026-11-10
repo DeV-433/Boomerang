@@ -84,3 +84,13 @@ export function groqKeys(config: Config): string[] {
   if (unique.length === 0) throw new Error("GROQ_API_KEY is not set");
   return unique;
 }
+
+/**
+ * The API's public address for pay-page links: PUBLIC_BASE_URL, or outside production the local
+ * API (http://localhost:PORT), so a local run needs no extra setting. Undefined in production
+ * without PUBLIC_BASE_URL: links are then not offered rather than pointing somewhere wrong.
+ */
+export function publicBaseUrl(config: Config): string | undefined {
+  if (config.PUBLIC_BASE_URL) return config.PUBLIC_BASE_URL;
+  return config.NODE_ENV === "production" ? undefined : `http://localhost:${config.PORT}`;
+}

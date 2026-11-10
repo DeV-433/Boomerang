@@ -1,5 +1,5 @@
 export { loadEnv } from "./env";
-export { groqKeys, loadConfig, requireConfig, type Config } from "./config";
+export { groqKeys, loadConfig, publicBaseUrl, requireConfig, type Config } from "./config";
 export { createLogger, REDACT_PATHS, scrub, anonymizeIp, type Logger } from "./logger";
 export {
   signSimulatedEvent,

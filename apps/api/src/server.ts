@@ -1,4 +1,4 @@
-import { createLogger, loadConfig, requireConfig } from "@boomerang/core";
+import { createLogger, loadConfig, publicBaseUrl, requireConfig } from "@boomerang/core";
 import { createDb } from "@boomerang/db";
 import { assertToolkitReady, createPayPal, OFFLINE_VERIFIER } from "@boomerang/paypal";
 import { GroqClient, RecordingClient } from "@boomerang/agent";
@@ -37,8 +37,8 @@ logger.info({ simulatedEvents: Boolean(simulation) }, "simulated event route");
 // 7C.6: messages link to the signed pay page when both settings are present (same as the worker,
 // so a message approved here passes the same lint it was drafted against).
 const payLinks =
-  config.PAY_LINK_SECRET && config.PUBLIC_BASE_URL
-    ? { secret: config.PAY_LINK_SECRET, baseUrl: config.PUBLIC_BASE_URL }
+  config.PAY_LINK_SECRET && publicBaseUrl(config)
+    ? { secret: config.PAY_LINK_SECRET, baseUrl: publicBaseUrl(config)! }
     : null;
 configurePayLinks(payLinks);
 logger.info({ payPage: Boolean(config.PAY_LINK_SECRET), payLinksInMessages: Boolean(payLinks) }, "pay page");

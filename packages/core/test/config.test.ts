@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groqKeys, loadConfig, requireConfig } from "../src/config";
+import { groqKeys, loadConfig, publicBaseUrl, requireConfig } from "../src/config";
 
 describe("loadConfig", () => {
   it("applies safe defaults", () => {
@@ -32,6 +32,12 @@ describe("loadConfig", () => {
         .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]),
     );
     expect(() => loadConfig(env)).not.toThrow();
+  });
+
+  it("defaults the pay-link base URL to the local API outside production only", () => {
+    expect(publicBaseUrl(loadConfig({ PORT: "3020" }))).toBe("http://localhost:3020");
+    expect(publicBaseUrl(loadConfig({ PUBLIC_BASE_URL: "https://api.example" }))).toBe("https://api.example");
+    expect(publicBaseUrl(loadConfig({ NODE_ENV: "production" }))).toBeUndefined();
   });
 
   it("rejects an unknown policy mode", () => {

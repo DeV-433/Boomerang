@@ -66,7 +66,7 @@ cp .env.example .env
 ```
 
 Edit `.env`: set `BOOMERANG_OFFLINE=true`, and give `OPERATOR_TOKEN`, `PAY_LINK_SECRET` and `SIM_WEBHOOK_SECRET` any
-long random values (`openssl rand -hex 24`). Leave the PayPal and Groq keys empty. Then:
+long random values (`openssl rand -hex 24`). Leave the PayPal and Groq keys empty. (`PUBLIC_BASE_URL`, used in pay-page links, defaults to the local API outside production.) Then:
 
 ```bash
 npm run db:up && npm run db:migrate   # Postgres 17 on localhost:5432
