@@ -12,7 +12,7 @@ import {
 import type { Policy } from "@boomerang/policy";
 import { CLOSED_UNPAID_STATUSES, PAID_STATUSES } from "./diagnose";
 import type { CheckResult, LoopDeps } from "./loop";
-import { closeCase, isSystemPaused, lockCase, scheduleCheck, setState } from "./store";
+import { closeCase, isSystemPaused, lockCase, scheduleCheck, setState, type Tx } from "./store";
 
 const H = 3_600_000;
 /** Retry a failed PayPal call after this long. */
@@ -89,6 +89,20 @@ async function recheckFailed(
         outcome: "deferred",
         detail: `could not re-check the invoice with PayPal; nothing sent, checking again in ${RECHECK_RETRY_MINUTES} minutes`,
       };
+}
+
+/**
+ * 9.5: two runs of the executor on one action (a retry overlapping the first run) can both pass the
+ * unlocked status read above; the idempotency ledger lets only one reach PayPal. The run that
+ * records second must not record again. Called inside the final transaction, after the case lock.
+ */
+async function recordedBefore(tx: Tx, actionId: string): Promise<boolean> {
+  const [a] = await tx
+    .select({ status: actions.status })
+    .from(actions)
+    .where(eq(actions.id, actionId))
+    .for("update");
+  return a?.status === "executed";
 }
 
 export async function executeAction(deps: LoopDeps, actionId: string, policy: Policy): Promise<CheckResult> {
@@ -177,9 +191,10 @@ export async function executeAction(deps: LoopDeps, actionId: string, policy: Po
   // Dry run: the agent only suggests. Record what would have been called and move on.
   if (policy.mode === "dry_run" || !deps.gateway) {
     const wouldCall = describeCall(action, current.paypalRef, message, current.amountCents, current.currency);
-    await auditedTransaction(deps.db, async (tx) => {
+    const duplicate = await auditedTransaction(deps.db, async (tx) => {
       const c = await lockCase(tx, caseId);
-      if (!c || isEndState(c.state)) return;
+      if (await recordedBefore(tx, actionId)) return true;
+      if (!c || isEndState(c.state)) return false;
       await tx
         .update(actions)
         .set({
@@ -199,7 +214,9 @@ export async function executeAction(deps: LoopDeps, actionId: string, policy: Po
         data: { actionId, dryRun: true, ...wouldCall, idempotencyKey: key },
         at: now,
       });
+      return false;
     });
+    if (duplicate) return { caseId, outcome: "skipped", detail: "already executed by another run" };
     return { caseId, outcome: "dry_run", detail: wouldCall.tool ?? wouldCall.channel };
   }
 
@@ -274,9 +291,10 @@ export async function executeAction(deps: LoopDeps, actionId: string, policy: Po
     return { caseId, outcome: "failed", detail: e.message };
   }
 
-  await auditedTransaction(deps.db, async (tx) => {
+  const duplicate = await auditedTransaction(deps.db, async (tx) => {
     const c = await lockCase(tx, caseId);
-    if (!c) return;
+    if (await recordedBefore(tx, actionId)) return true;
+    if (!c) return false;
     const contact = isContactAction(action);
     await tx
       .update(actions)
@@ -289,7 +307,7 @@ export async function executeAction(deps: LoopDeps, actionId: string, policy: Po
       data: { actionId, ...toolCall, response: toolResponse, idempotencyKey: key },
       at: now,
     });
-    if (isEndState(c.state)) return; // paid while the call was in flight: the payment wins, the record stays
+    if (isEndState(c.state)) return false; // paid while the call was in flight: the payment wins, the record stays
     await setState(
       tx,
       caseId,
@@ -306,7 +324,9 @@ export async function executeAction(deps: LoopDeps, actionId: string, policy: Po
       new Date(now.getTime() + nextCheckHours * H),
       `next check after ${action}`,
     );
+    return false;
   });
+  if (duplicate) return { caseId, outcome: "skipped", detail: "already executed by another run" };
   deps.logger?.info({ caseId, action, key }, "action executed");
   return { caseId, outcome: "executed", detail: action };
 }
