@@ -18,6 +18,11 @@ export interface WebhookVerifier {
   verify(headers: WebhookHeaders, rawBody: string): Promise<VerifyResult>;
 }
 
+/** 10.3: offline mode refuses every PayPal webhook (there is no PayPal to verify it with). */
+export const OFFLINE_VERIFIER: WebhookVerifier = {
+  verify: async () => ({ verified: false, reason: "offline mode: PayPal webhooks are not accepted" }),
+};
+
 function header(headers: WebhookHeaders, name: string): string | undefined {
   const value = headers[name];
   return Array.isArray(value) ? value[0] : value;

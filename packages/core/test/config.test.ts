@@ -18,6 +18,14 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ POLICY_MODE: "yolo" })).toThrow(/POLICY_MODE/);
   });
 
+  it("reads offline mode (10.3), off by default", () => {
+    expect(loadConfig({}).BOOMERANG_OFFLINE).toBe(false);
+    expect(loadConfig({ BOOMERANG_OFFLINE: "true" }).BOOMERANG_OFFLINE).toBe(true);
+    expect(loadConfig({ BOOMERANG_OFFLINE: "1" }).BOOMERANG_OFFLINE).toBe(true);
+    expect(loadConfig({ BOOMERANG_OFFLINE: "false" }).BOOMERANG_OFFLINE).toBe(false);
+    expect(() => loadConfig({ BOOMERANG_OFFLINE: "maybe" })).toThrow(/BOOMERANG_OFFLINE/);
+  });
+
   it("names the missing variable", () => {
     expect(() => requireConfig(loadConfig({}), "DATABASE_URL")).toThrow(/DATABASE_URL/);
   });

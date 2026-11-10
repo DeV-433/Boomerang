@@ -26,6 +26,15 @@ const ConfigSchema = z.object({
   /** Requests per minute per Groq model; unset means no client-side limit (Groq's own headers still pace calls). */
   GROQ_RPM: z.coerce.number().positive().optional(),
   POLICY_MODE: z.enum(["dry_run", "live"]).default("dry_run"),
+  /**
+   * 10.3: run with no PayPal at all (demo or a machine without PayPal credentials). The API and the
+   * worker create no PayPal client: every action is a dry run, real webhooks are refused, the
+   * invoice poller is off. Simulated events, the dashboard and the pay page still work.
+   */
+  BOOMERANG_OFFLINE: z
+    .enum(["true", "false", "1", "0", ""])
+    .optional()
+    .transform((v) => v === "true" || v === "1"),
   /** Signs the self-serve pay-page links (7C.1). Same value on the API and the worker. */
   PAY_LINK_SECRET: optionalString,
   /** The API's public address, used to build pay-page links (7C.6), e.g. https://boomerang-api-rgd8.onrender.com */

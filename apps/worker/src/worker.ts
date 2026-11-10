@@ -22,7 +22,10 @@ const db = createDb(requireConfig(config, "DATABASE_URL"), { max: 4 });
 
 const toolkit = assertToolkitReady();
 logger.info({ toolkitVersion: toolkit.version, enabled: toolkit.enabled }, "PayPal Agent Toolkit loaded");
-const paypal = createPayPal(config, { db: db.db, logger });
+// 10.3: offline mode: no PayPal client, no invoice polling, dry run only.
+const offline = config.BOOMERANG_OFFLINE;
+const paypal = offline ? null : createPayPal(config, { db: db.db, logger });
+if (offline) logger.warn("offline mode: no PayPal client; every action is a dry run, no invoice polling");
 
 // 7C.6: reminders link to the signed pay page when both settings are present (same as the API).
 const payLinks =
@@ -45,9 +48,9 @@ const model = config.GROQ_API_KEY
   : null;
 const deps: LoopDeps = {
   db: db.db,
-  gateway: paypal.gateway,
+  gateway: paypal?.gateway,
   logger,
-  mode: config.POLICY_MODE,
+  mode: offline ? "dry_run" : config.POLICY_MODE,
   ...(model
     ? { proposer: agentProposer({ client: model, onValidated: (req, ok) => model.markValid(req, ok) }) }
     : {}),
@@ -64,7 +67,7 @@ async function tick(): Promise<void> {
     await pingDb(db.pool);
     if (model) await classifyPendingReplies(db.db, model, { logger });
     const processed = await processPendingEvents(db.db, { logger });
-    if (Date.now() - lastPoll >= POLL_MS) {
+    if (paypal && Date.now() - lastPoll >= POLL_MS) {
       lastPoll = Date.now();
       try {
         await pollInvoices({
@@ -107,5 +110,5 @@ async function shutdown(signal: string): Promise<void> {
 process.once("SIGTERM", () => void shutdown("SIGTERM"));
 process.once("SIGINT", () => void shutdown("SIGINT"));
 
-logger.info({ mode: config.POLICY_MODE, tickMs: TICK_MS, pollMs: POLL_MS }, "worker ready");
+logger.info({ mode: deps.mode, offline, tickMs: TICK_MS, pollMs: POLL_MS }, "worker ready");
 await tick();

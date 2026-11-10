@@ -3,6 +3,7 @@ export { TokenManager, EXPIRY_MARGIN_MS, type PayPalCredentials } from "./auth";
 export { DEFAULT_RETRY, backoffDelay, isRetryable, withRetry, type RetryOptions } from "./retry";
 export {
   PayPalWebhookVerifier,
+  OFFLINE_VERIFIER,
   buildVerificationBody,
   PAYPAL_WEBHOOK_HEADERS,
   type WebhookVerifier,

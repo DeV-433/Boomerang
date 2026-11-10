@@ -1,6 +1,6 @@
 import { createLogger, loadConfig, requireConfig } from "@boomerang/core";
 import { createDb } from "@boomerang/db";
-import { assertToolkitReady, createPayPal } from "@boomerang/paypal";
+import { assertToolkitReady, createPayPal, OFFLINE_VERIFIER } from "@boomerang/paypal";
 import { GroqClient, RecordingClient } from "@boomerang/agent";
 import { configurePayLinks } from "@boomerang/cases";
 import { buildApp, corsOriginsFrom } from "./app";
@@ -19,8 +19,13 @@ logger.info(
   },
   "PayPal Agent Toolkit loaded",
 );
-const { verifier, gateway } = createPayPal(config, { db: db.db, logger });
-if (!config.PAYPAL_WEBHOOK_ID) {
+// 10.3: offline mode has no PayPal client at all; actions become dry runs and webhooks are refused.
+const offline = config.BOOMERANG_OFFLINE;
+const { verifier, gateway } = offline
+  ? { verifier: OFFLINE_VERIFIER, gateway: undefined }
+  : createPayPal(config, { db: db.db, logger });
+if (offline) logger.warn("offline mode: no PayPal client; every action is a dry run");
+else if (!config.PAYPAL_WEBHOOK_ID) {
   logger.warn("PAYPAL_WEBHOOK_ID is not set: every incoming webhook will be rejected until it is");
 }
 
@@ -48,7 +53,7 @@ const app = await buildApp({
   simulation,
   corsOrigins,
   operatorToken: config.OPERATOR_TOKEN,
-  policyMode: config.POLICY_MODE,
+  policyMode: offline ? "dry_run" : config.POLICY_MODE,
   gateway,
   payLinkSecret: config.PAY_LINK_SECRET,
   merchantName: config.MERCHANT_NAME,
@@ -71,4 +76,7 @@ process.once("SIGTERM", () => void shutdown("SIGTERM"));
 process.once("SIGINT", () => void shutdown("SIGINT"));
 
 await app.listen({ host: "0.0.0.0", port: config.PORT });
-logger.info({ environment: config.PAYPAL_ENVIRONMENT, mode: config.POLICY_MODE }, "api ready");
+logger.info(
+  { environment: config.PAYPAL_ENVIRONMENT, mode: offline ? "dry_run" : config.POLICY_MODE, offline },
+  "api ready",
+);
