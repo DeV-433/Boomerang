@@ -39,7 +39,7 @@ export {
 export { seedBatch, type SeedOptions, type SeedSummary } from "./seed";
 export { findBatch, loadSimCases, saveRun } from "./store";
 export { rulesStrategy, loopStrategy, contactKindFor, SIM_EPOCH, type TreatmentStats } from "./treatment";
-export { pairedBootstrap, percentile, type Interval } from "./bootstrap";
+export { pairedBootstrap, twoSampleBootstrap, percentile, type Interval, type ArmSample } from "./bootstrap";
 export {
   loadReplay,
   replay,

@@ -3,6 +3,25 @@ import { useState } from "react";
 import type { ArmTotals, SimArmMetrics, SummaryResponse } from "@boomerang/core";
 import { api } from "../api";
 import { count, dateTime, money, pct, points, usd } from "../format";
+import { IntervalPlot, type IntervalRow } from "../IntervalPlot";
+import { SimSettingsPanel } from "../SimSettingsPanel";
+
+/** Dollars large, cents small and muted, like a ledger total. */
+function BigMoney({ cents }: { cents: number }) {
+  const [whole, frac] = money(cents).split(".");
+  return (
+    <span className="big-money">
+      {whole}
+      <span className="big-money-cents">.{frac}</span>
+    </span>
+  );
+}
+
+function Delta({ value }: { value: number | null }) {
+  if (value === null) return null;
+  const cls = value > 0.05 ? "delta-up" : value < -0.05 ? "delta-down" : "delta-flat";
+  return <span className={`delta ${cls}`}>{points(value)}</span>;
+}
 
 function Tile({ label, value, sub, hero }: { label: string; value: string; sub?: string; hero?: boolean }) {
   return (
@@ -99,14 +118,48 @@ export function Summary() {
   const sim = s.simulated;
   const ctl = sim.control?.metrics;
   const trt = sim.treatment?.metrics;
+  const intervals: IntervalRow[] = [];
+  if (sim.upliftPoints !== null && sim.interval)
+    intervals.push({
+      name: "vs control arm",
+      estimate: sim.upliftPoints,
+      low: sim.interval.low,
+      high: sim.interval.high,
+      note: "different cases in each arm, so part of the gap is luck of the split",
+    });
+  if (sim.sameCases)
+    intervals.push({
+      name: "vs baseline, same cases",
+      estimate: sim.sameCases.upliftPoints,
+      low: sim.sameCases.interval.low,
+      high: sim.sameCases.interval.high,
+      note: `the baseline would recover ${pct(sim.sameCases.baselineRate)} of the treatment arm`,
+    });
+  const today = new Date();
 
   return (
     <div className="summary">
       <div className="page-head">
-        <h1>Summary</h1>
+        <h1>Recovery summary</h1>
+        <span className="date-chip">
+          <span className="date-chip-icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="5" width="18" height="16" rx="3" />
+              <path d="M3 10h18M8 3v4M16 3v4" />
+            </svg>
+          </span>
+          <span>
+            <span className="date-chip-day">
+              {today.toLocaleDateString(undefined, { day: "numeric", month: "long" })}
+            </span>
+            <span className="date-chip-year">{today.getFullYear()}</span>
+          </span>
+        </span>
         <div className="chips">
           <span className="chip">{s.batch ? s.batch.name : "no batch"}</span>
-          <span className="chip">{s.system.mode === "live" ? "Live mode" : "Dry run"}</span>
+          <span className={`chip ${s.system.mode === "live" ? "chip-accent" : ""}`}>
+            {s.system.mode === "live" ? "Live mode" : "Dry run"}
+          </span>
           {s.system.paused && <span className="chip chip-warn">Paused</span>}
           <span className="chip">
             {s.batch?.startedAt ? `Batch started ${dateTime(s.batch.startedAt)}` : "Batch not started"}
@@ -114,121 +167,161 @@ export function Summary() {
         </div>
       </div>
 
-      <section className="card">
-        <div className="card-head">
-          <h2>Simulated result: treatment vs control</h2>
-          {sim.runs.some((r) => r.arm === "treatment") && (
-            <label className="picker">
-              Treatment run{" "}
-              <select
-                value={treatmentRun || sim.treatment?.id || ""}
-                onChange={(e) => setTreatmentRun(e.target.value)}
-              >
-                {sim.runs
-                  .filter((r) => r.arm === "treatment")
-                  .map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.strategy} ({dateTime(r.startedAt)})
-                    </option>
-                  ))}
-              </select>
-            </label>
-          )}
-        </div>
-        {ctl && trt ? (
-          <>
+      {ctl && trt ? (
+        <div className="bento">
+          <section className="card span-5">
+            <div className="card-head">
+              <h2>Recovered by Boomerang</h2>
+              {sim.runs.filter((r) => r.arm === "treatment").length > 1 && (
+                <label className="picker">
+                  <span className="sr-only">Treatment run</span>
+                  <select
+                    value={treatmentRun || sim.treatment?.id || ""}
+                    onChange={(e) => setTreatmentRun(e.target.value)}
+                  >
+                    {sim.runs
+                      .filter((r) => r.arm === "treatment")
+                      .map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.strategy} ({dateTime(r.startedAt)})
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              )}
+            </div>
+            <div className="hero-line">
+              <BigMoney cents={trt.recoveredCents} />
+              <Delta value={sim.upliftPoints} />
+            </div>
+            <p className="tile-sub">
+              {pct(trt.recoveryRate)} of {money(trt.atRiskCents, { compact: true })} at risk in the treatment
+              arm ({sim.treatment!.strategy}); the control arm recovered {pct(ctl.recoveryRate)}.
+            </p>
+            <h3>Recovery rate</h3>
+            <RecoveryMeters
+              rows={[
+                { name: "Control (fixed schedule)", totals: ctl },
+                { name: `Treatment (${sim.treatment!.strategy})`, totals: trt },
+              ]}
+            />
+          </section>
+
+          <section className="card span-4">
+            <h2>Uplift and interval</h2>
+            <div className="hero-line">
+              <span className="big-number">
+                {sim.upliftPoints === null
+                  ? "n/a"
+                  : `${sim.upliftPoints > 0 ? "+" : sim.upliftPoints < 0 ? "−" : ""}${Math.abs(sim.upliftPoints).toFixed(1)}`}
+                <span className="accent big-number-unit">pts</span>
+              </span>
+            </div>
+            <p className="tile-sub">
+              Treatment minus control recovery rate.
+              {sim.interval &&
+                ` ${Math.round(sim.interval.level * 100)}% bootstrap interval ${sim.interval.low.toFixed(1)} to ${sim.interval.high.toFixed(1)} points (${count(sim.interval.iterations)} resamples).`}
+            </p>
+            <IntervalPlot rows={intervals} level={sim.interval?.level} />
             <div className="tiles">
-              <Tile
-                hero
-                label="Uplift vs control"
-                value={points(sim.upliftPoints)}
-                sub={`${pct(trt.recoveryRate)} treatment vs ${pct(ctl.recoveryRate)} control`}
-              />
-              <Tile
-                label="Recovered (treatment)"
-                value={money(trt.recoveredCents, { compact: true })}
-                sub={`of ${money(trt.atRiskCents, { compact: true })} at risk`}
-              />
               <Tile
                 label="Contacts sent"
                 value={count(trt.contacts)}
                 sub={`control sent ${count(ctl.contacts)}`}
               />
               <Tile
-                label="Contacts after opt-out"
+                label="After opt-out"
                 value={count(trt.contactsAfterOptOut)}
                 sub={`control: ${count(ctl.contactsAfterOptOut)}`}
               />
-              {trt.modelCostPerRecoveredDollar !== undefined && (
-                <Tile
-                  label="Model cost per recovered dollar"
-                  value={usd(trt.modelCostPerRecoveredDollar, 6)}
-                  sub={trt.model ? `${usd(trt.model.all.costUsd)} for the run` : undefined}
-                />
-              )}
             </div>
-            <h3>Recovery rate</h3>
-            <RecoveryMeters
-              rows={[
-                { name: `Control (${sim.control!.strategy})`, totals: ctl },
-                { name: `Treatment (${sim.treatment!.strategy})`, totals: trt },
-              ]}
-            />
-            <details className="table-view" open>
-              <summary>All metrics</summary>
-              <table>
-                <thead>
-                  <tr>
-                    <th scope="col">Metric</th>
-                    <th scope="col">Control</th>
-                    <th scope="col">Treatment</th>
+          </section>
+
+          <section className="card span-3 rows-2 card-accent">
+            <h2>Simulator settings</h2>
+            {sim.settings ? (
+              <SimSettingsPanel settings={sim.settings} />
+            ) : (
+              <p className="muted">No settings stored.</p>
+            )}
+          </section>
+
+          <section className="card span-5">
+            <h2>All metrics</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Metric</th>
+                  <th scope="col">Control</th>
+                  <th scope="col">Treatment</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ROWS.map((row) => (
+                  <tr key={row.label}>
+                    <th scope="row">{row.label}</th>
+                    <td>{row.get(ctl)}</td>
+                    <td>{row.get(trt)}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {ROWS.map((row) => (
-                    <tr key={row.label}>
-                      <th scope="row">{row.label}</th>
-                      <td>{row.get(ctl)}</td>
-                      <td>{row.get(trt)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </details>
+                ))}
+                {trt.modelCostPerRecoveredDollar != null && (
+                  <tr>
+                    <th scope="row">Model cost per recovered dollar</th>
+                    <td>n/a</td>
+                    <td>
+                      {usd(trt.modelCostPerRecoveredDollar, 6)}
+                      {trt.model ? ` (${usd(trt.model.all.costUsd)} for the run)` : ""}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
             <p className="note">
               Simulated customers: this reflects the simulator's assumptions, not real-world proof.
             </p>
-          </>
-        ) : (
-          <p className="muted">No finished simulation runs for this batch yet.</p>
-        )}
-      </section>
+          </section>
 
-      <section className="card">
-        <h2>Live cases in the database</h2>
-        <div className="tiles">
-          <Tile
-            label="Control arm"
-            value={pct(s.live.control.recoveryRate)}
-            sub={`${money(s.live.control.recoveredCents, { compact: true })} of ${money(s.live.control.atRiskCents, { compact: true })}, ${count(s.live.control.cases)} cases`}
-          />
-          <Tile
-            label="Treatment arm"
-            value={pct(s.live.treatment.recoveryRate)}
-            sub={`${money(s.live.treatment.recoveredCents, { compact: true })} of ${money(s.live.treatment.atRiskCents, { compact: true })}, ${count(s.live.treatment.cases)} cases`}
-          />
-          <Tile
-            label="Live uplift"
-            value={points(s.live.upliftPoints)}
-            sub={s.batch?.startedAt ? "treatment minus control" : "batch not started: no treatment work yet"}
-          />
-          <Tile
-            label="Organic cases"
-            value={count(s.organic.cases)}
-            sub={`${money(s.organic.recoveredCents)} of ${money(s.organic.atRiskCents)} recovered`}
-          />
+          <LiveCard s={s} className="span-4" />
         </div>
-      </section>
+      ) : (
+        <div className="bento">
+          <section className="card span-12">
+            <h2>Simulated result</h2>
+            <p className="muted">No finished simulation runs for this batch yet.</p>
+          </section>
+          <LiveCard s={s} className="span-12" />
+        </div>
+      )}
     </div>
+  );
+}
+
+function LiveCard({ s, className }: { s: SummaryResponse; className: string }) {
+  return (
+    <section className={`card ${className}`}>
+      <h2>Live cases in the database</h2>
+      <div className="tiles tiles-2">
+        <Tile
+          label="Control arm"
+          value={pct(s.live.control.recoveryRate)}
+          sub={`${money(s.live.control.recoveredCents, { compact: true })} of ${money(s.live.control.atRiskCents, { compact: true })}, ${count(s.live.control.cases)} cases`}
+        />
+        <Tile
+          label="Treatment arm"
+          value={pct(s.live.treatment.recoveryRate)}
+          sub={`${money(s.live.treatment.recoveredCents, { compact: true })} of ${money(s.live.treatment.atRiskCents, { compact: true })}, ${count(s.live.treatment.cases)} cases`}
+        />
+        <Tile
+          label="Live uplift"
+          value={points(s.live.upliftPoints)}
+          sub={s.batch?.startedAt ? "treatment minus control" : "batch not started: no treatment work yet"}
+        />
+        <Tile
+          label="Organic cases"
+          value={count(s.organic.cases)}
+          sub={`${money(s.organic.recoveredCents)} of ${money(s.organic.atRiskCents)} recovered`}
+        />
+      </div>
+    </section>
   );
 }

@@ -84,3 +84,50 @@ export function pairedBootstrap(
     ...(rates ? { rate: interval(rates, weightTotal === 0 ? 0 : total / weightTotal) } : {}),
   };
 }
+
+/** Recovered and at-risk amounts of one arm, one entry per case. */
+export interface ArmSample {
+  recovered: readonly number[];
+  atRisk: readonly number[];
+}
+
+/**
+ * Step 9.1: interval for the difference in recovery rates between two different groups of cases
+ * (treatment arm minus control arm). Unlike `pairedBootstrap`, the arms hold different cases, so
+ * each is resampled on its own; the rate is recovered / at risk on the resampled cases.
+ */
+export function twoSampleBootstrap(
+  control: ArmSample,
+  treatment: ArmSample,
+  options: { iterations?: number; level?: number; seed?: string } = {},
+): Interval {
+  for (const arm of [control, treatment]) {
+    if (arm.recovered.length === 0 || arm.recovered.length !== arm.atRisk.length)
+      throw new Error("each arm needs equally long, non-empty lists");
+  }
+  const iterations = options.iterations ?? 2000;
+  const level = options.level ?? 0.95;
+  const rand = mulberry32(seedFrom(options.seed ?? "boomerang-two-sample"));
+  const rate = (arm: ArmSample, draw: boolean): number => {
+    const n = arm.recovered.length;
+    let rec = 0;
+    let risk = 0;
+    for (let j = 0; j < n; j++) {
+      const k = draw ? Math.floor(rand() * n) : j;
+      rec += arm.recovered[k]!;
+      risk += arm.atRisk[k]!;
+    }
+    return risk === 0 ? 0 : rec / risk;
+  };
+  const diffs = new Array<number>(iterations);
+  for (let it = 0; it < iterations; it++) diffs[it] = rate(treatment, true) - rate(control, true);
+  diffs.sort((a, b) => a - b);
+  const tail = (1 - level) / 2;
+  return {
+    estimate: rate(treatment, false) - rate(control, false),
+    low: percentile(diffs, tail),
+    high: percentile(diffs, 1 - tail),
+    level,
+    iterations,
+  };
+}

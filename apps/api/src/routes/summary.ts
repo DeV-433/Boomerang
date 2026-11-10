@@ -1,7 +1,16 @@
+import { createHash } from "node:crypto";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import type { ArmTotals, SimArmMetrics, SimRunInfo, SummaryResponse } from "@boomerang/core";
-import { batches, cases, simRuns, systemState, type Database } from "@boomerang/db";
+import type {
+  ArmTotals,
+  SimArmMetrics,
+  SimRunInfo,
+  SimSettings,
+  SummaryResponse,
+  UpliftInterval,
+} from "@boomerang/core";
+import { batches, cases, simCaseResults, simRuns, systemState, type Database } from "@boomerang/db";
+import { twoSampleBootstrap, type ArmSample } from "@boomerang/sim";
 import type { AppDeps } from "../app";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -39,6 +48,32 @@ const runInfo = (r: typeof simRuns.$inferSelect): SimRunInfo => ({
   startedAt: r.startedAt.toISOString(),
   finishedAt: r.finishedAt?.toISOString() ?? null,
 });
+
+async function armSample(db: Database, runId: string): Promise<ArmSample> {
+  const rows = await db
+    .select({ recovered: simCaseResults.recoveredCents, atRisk: simCaseResults.amountCents })
+    .from(simCaseResults)
+    .where(eq(simCaseResults.runId, runId));
+  return { recovered: rows.map((r) => Number(r.recovered)), atRisk: rows.map((r) => Number(r.atRisk)) };
+}
+
+/** 9.1: 95% interval of treatment-minus-control recovery rate, from the runs' per-case results. */
+async function upliftInterval(
+  db: Database,
+  controlRunId: string,
+  treatmentRunId: string,
+): Promise<UpliftInterval | null> {
+  const [control, treatment] = await Promise.all([
+    armSample(db, controlRunId),
+    armSample(db, treatmentRunId),
+  ]);
+  if (control.atRisk.length === 0 || treatment.atRisk.length === 0) return null;
+  const i = twoSampleBootstrap(control, treatment, { seed: `${controlRunId}|${treatmentRunId}` });
+  return { low: i.low * 100, high: i.high * 100, level: i.level, iterations: i.iterations };
+}
+
+export const configHash = (config: unknown) =>
+  createHash("sha256").update(JSON.stringify(config)).digest("hex").slice(0, 12);
 
 /** Step 6.2: at-risk, recovered, rate and the control comparison, live and simulated. */
 export async function buildSummary(
@@ -79,6 +114,23 @@ export async function buildSummary(
     r ? { ...runInfo(r), metrics: r.metrics as SimArmMetrics } : null;
   const simControl = withMetrics(control);
   const simTreatment = withMetrics(treatment);
+  const interval = control && treatment ? await upliftInterval(db, control.id, treatment.id) : null;
+  type Stored = { sameCases?: SummaryResponse["simulated"]["sameCases"] } | null;
+  const sameCases = (treatment?.metrics as Stored)?.sameCases ?? null;
+  const shown = treatment ?? control;
+  const settings: SimSettings | null =
+    batch && shown
+      ? {
+          seed: shown.seed,
+          batchName: batch.name,
+          batchSize: batch.size,
+          batchMode: batch.mode,
+          configHash: configHash(shown.simConfig),
+          sameConfigBothArms:
+            !control || !treatment || configHash(control.simConfig) === configHash(treatment.simConfig),
+          config: shown.simConfig as Record<string, unknown>,
+        }
+      : null;
 
   const [sys] = await db.select().from(systemState).where(eq(systemState.id, 1));
   return {
@@ -99,6 +151,9 @@ export async function buildSummary(
       control: simControl,
       treatment: simTreatment,
       upliftPoints: simControl && simTreatment ? points(simControl.metrics, simTreatment.metrics) : null,
+      interval,
+      sameCases,
+      settings,
       runs: runs.map(runInfo),
     },
     system: { paused: sys?.paused ?? false, mode: opts.mode },

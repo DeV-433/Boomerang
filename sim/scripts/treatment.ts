@@ -20,8 +20,11 @@ import {
   parseSimConfig,
   Rng,
   loopStrategy,
+  pairedBootstrap,
   saveRun,
   simulateArm,
+  twoSampleBootstrap,
+  type Interval,
 } from "../src/index";
 import { arg, dollars } from "./args";
 
@@ -105,10 +108,29 @@ try {
   );
   const cmp = compareArms(control, treatment);
   // The same treatment cases under the baseline: separates the strategy's effect from luck of the split.
-  const paired = compareArms(
-    await simulateArm(simConfig, rng, treatmentCases, baselineStrategy(simConfig)),
-    treatment,
-  );
+  const baselineOnTreatment = await simulateArm(simConfig, rng, treatmentCases, baselineStrategy(simConfig));
+  const paired = compareArms(baselineOnTreatment, treatment);
+  // 9.1: intervals. Against the control arm the cases differ, so the arms are resampled separately;
+  // against the baseline on the same cases they are resampled as pairs.
+  const sample = (rs: typeof treatment) => ({
+    recovered: rs.map((r) => r.recoveredCents),
+    atRisk: rs.map((r) => r.amountCents),
+  });
+  const vsControl = twoSampleBootstrap(sample(control), sample(treatment), {
+    seed: `${batch.seed}|vs-control`,
+  });
+  const baseById = new Map(baselineOnTreatment.map((r) => [r.caseId, r]));
+  const pairedRate = pairedBootstrap(
+    treatment.map((r) => baseById.get(r.caseId)!.recoveredCents),
+    treatment.map((r) => r.recoveredCents),
+    { weights: treatment.map((r) => r.amountCents), seed: `${batch.seed}|same-cases` },
+  ).rate!;
+  const toPoints = (i: Interval) => ({
+    low: i.low * 100,
+    high: i.high * 100,
+    level: i.level,
+    iterations: i.iterations,
+  });
   const runId = await saveRun(db.db, {
     batchId: batch.id,
     arm: "treatment",
@@ -121,10 +143,16 @@ try {
       escalated: strategy.stats.escalated,
       heldForApproval: strategy.stats.heldForApproval,
       model: which === "agent" ? meter.totals : null,
+      // Null for the rules: no model was used, so there is no model cost to report.
       modelCostPerRecoveredDollar:
-        cmp.treatment.recoveredCents > 0
+        which === "agent" && cmp.treatment.recoveredCents > 0
           ? meter.totals.all.costUsd / (cmp.treatment.recoveredCents / 100)
           : null,
+      sameCases: {
+        baselineRate: paired.control.recoveryRate,
+        upliftPoints: paired.uplift * 100,
+        interval: toPoints(pairedRate),
+      },
     },
   });
 
@@ -156,11 +184,16 @@ try {
     String(cmp.treatment.contactsAfterOptOut),
   );
   row("disputes", String(cmp.control.disputes), String(cmp.treatment.disputes));
-  console.log(`\n  uplift vs control arm:                ${(cmp.uplift * 100).toFixed(1)} points`);
+  const ci = (i: Interval) => `95% interval ${(i.low * 100).toFixed(1)} to ${(i.high * 100).toFixed(1)}`;
   console.log(
-    `  uplift vs baseline on the same cases: ${(paired.uplift * 100).toFixed(1)} points (baseline would recover ${pct(paired.control.recoveryRate)} of the treatment arm)`,
+    `\n  uplift vs control arm:                ${(cmp.uplift * 100).toFixed(1)} points (${ci(vsControl)})`,
   );
-  console.log(`  A gap between the two is luck of the split; 7A.6 and 9.2 add intervals and more seeds.`);
+  console.log(
+    `  uplift vs baseline on the same cases: ${(paired.uplift * 100).toFixed(1)} points (${ci(pairedRate)}; baseline would recover ${pct(paired.control.recoveryRate)} of the treatment arm)`,
+  );
+  console.log(
+    `  A gap between the two is luck of the split. npm run sim:sensitivity varies seeds and settings (9.2).`,
+  );
   console.log(
     `  treatment escalated to a person: ${strategy.stats.escalated}, held for approval: ${strategy.stats.heldForApproval}, stopped: ${strategy.stats.stopped}`,
   );

@@ -46,6 +46,28 @@ export interface SimRunInfo {
   finishedAt: string | null;
 }
 
+export interface UpliftInterval {
+  /** Percentage points. */
+  low: number;
+  high: number;
+  /** e.g. 0.95 */
+  level: number;
+  iterations: number;
+}
+
+/** 9.3: what produced a simulated result. `config` is the full simulator config stored with the run. */
+export interface SimSettings {
+  seed: string;
+  batchName: string;
+  batchSize: number;
+  batchMode: string;
+  /** First 12 hex characters of the SHA-256 of the config, to tell two configs apart at a glance. */
+  configHash: string;
+  /** False when the control and treatment runs were made with different configs. */
+  sameConfigBothArms: boolean;
+  config: Record<string, unknown>;
+}
+
 export interface SummaryResponse {
   batch: {
     id: string;
@@ -66,6 +88,15 @@ export interface SummaryResponse {
     treatment: (SimRunInfo & { metrics: SimArmMetrics }) | null;
     /** Treatment recovery rate minus control recovery rate, in percentage points. */
     upliftPoints: number | null;
+    /** 9.1: bootstrap interval of the uplift in points (the two arms resampled independently). */
+    interval: UpliftInterval | null;
+    /**
+     * The treatment arm's own cases under the fixed-schedule baseline, which separates the strategy's
+     * effect from the luck of the split. Stored with treatment runs from step 9.1 on.
+     */
+    sameCases: { baselineRate: number; upliftPoints: number; interval: UpliftInterval } | null;
+    /** 9.3: the simulator settings and seed that produced these numbers. */
+    settings: SimSettings | null;
     runs: SimRunInfo[];
   };
   system: { paused: boolean; mode: "dry_run" | "live" };

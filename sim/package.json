@@ -11,7 +11,8 @@
     "baseline": "tsx scripts/baseline.ts",
     "test": "vitest run --passWithNoTests",
     "treatment": "tsx scripts/treatment.ts",
-    "replay": "tsx scripts/replay.ts"
+    "replay": "tsx scripts/replay.ts",
+    "experiment": "tsx scripts/experiment.ts"
   },
   "dependencies": {
     "seedrandom": "3.0.5",
