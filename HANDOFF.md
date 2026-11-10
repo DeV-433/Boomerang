@@ -6,7 +6,7 @@ This file holds no secrets: the values live in `.env`, which is git-ignored and 
 ---
 
 You are continuing **Boomerang**, a PayPal revenue-recovery agent, built step by step from `BUILD_PLAN.md` at the
-repository root. Phases 0 to 8 are built. **Start at Phase 9 and work onward through Phase 10**, one phase at a time.
+repository root. Phases 0 to 8 are done (only 2.6 remains open, see below). **Start at Phase 9 and work onward through Phase 10**, one phase at a time.
 Read `BUILD_PLAN.md` first, especially "Current status (read this first)" and its "Decisions that differ from the text
 of this plan" table: those decisions override the plan's original wording and the project documentation.
 
@@ -117,23 +117,9 @@ Copy `.env` from the old machine over a private channel. Check keys by length on
 
 ## Unfinished from earlier phases (finish when the sandbox allows)
 
-- **2.9 + 8.5 + 8.6, one sandbox run.** Subscription `I-7AV61N6EYGP5` (daily $9.99 plan) was due to bill at
-  10:00 UTC on 2026-11-10 with the original US sandbox personal account holding **no payment method**, so the payment
-  should fail. PayPal's sandbox bills in batches, sometimes hours late; check with
-  `npx tsx packages/paypal/scripts/sandbox-subscription.ts check I-7AV61N6EYGP5` and look for a case with
-  `paypal_ref='I-7AV61N6EYGP5'` in the Render database. Then:
-  1. Confirm the case opened from `BILLING.SUBSCRIPTION.PAYMENT.FAILED` with an outstanding balance.
-  2. The user adds a payment method back to the original personal account.
-  3. Open the case's pay page ("Pay link" on the Cases grid, or `GET /api/cases/:id/paylink`) and press
-     "I have updated it: try the payment again" (event `BOOMERANG.CUSTOMER.PAYMENT_UPDATED`, cause
-     `payment_method_updated`).
-  4. The next check proposes `request_balance_capture`; gate rule 12 holds it.
-  5. The user approves it on the Approvals page; confirm PayPal captured the balance
-     (`/v1/billing/subscriptions/{id}/capture`, `OUTSTANDING_BALANCE`) and that `PAYMENT.SALE.COMPLETED` closed the
-     case as recovered. Tick 2.9, 8.5 and 8.6.
-  If the subscription was charged successfully instead (the account had a payment method), report it; the sandbox
-  cannot create an outstanding balance any other way (PATCH can only lower one).
-  The automated end-to-end test for this chain is `apps/api/test/retry.test.ts`.
+- 2.9, 8.5 and 8.6 were verified in the real sandbox on 2026-11-10 (see `BUILD_PLAN.md`). The original personal
+  account has a payment method again, so subscription `I-7AV61N6EYGP5` (daily $9.99) keeps charging it; cancel it in
+  the sandbox if it gets in the way. The end-to-end test for that chain is `apps/api/test/retry.test.ts`.
 - **2.6** (PayPal's own invoice reminder suppressed): only observable when an invoice reaches its due date.
 
 ## Facts that later steps depend on
@@ -153,4 +139,4 @@ Copy `.env` from the old machine over a private channel. Check keys by length on
 ## First thing to do
 
 Run `npm run ci`, check `https://boomerang-api-rgd8.onrender.com/healthz`, read `BUILD_PLAN.md` "Current status",
-check the state of `I-7AV61N6EYGP5` (above), then begin **Phase 9 (9.1: the full control-versus-treatment experiment)**.
+then begin **Phase 9 (9.1: the full control-versus-treatment experiment)**.
