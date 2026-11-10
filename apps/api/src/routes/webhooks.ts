@@ -35,8 +35,14 @@ export function resourceIdOf(envelope: PayPalEventEnvelope): string | null {
   return str(envelope.resource?.id) ?? str(envelope.resource?.invoice?.id);
 }
 
-/** 9.6: how old a PayPal transmission may be, and how far ahead of our clock (skew). */
-export const REPLAY_WINDOW_MS = 15 * 60_000;
+/**
+ * 9.6: how old a PayPal transmission may be. PayPal retries a failed delivery up to 25 times over
+ * 3 days, and its docs do not say whether a retry carries a new transmission time, so the window
+ * is longer than the whole retry span: it can never turn away a genuine retry. Replays inside the
+ * window are harmless anyway: each event is stored once by its PayPal event id, and every delivery
+ * is signature-checked.
+ */
+export const REPLAY_WINDOW_MS = 4 * 24 * 60 * 60_000;
 export const FUTURE_SKEW_MS = 5 * 60_000;
 /** 9.6: deliveries per client address per minute on each webhook route. Generous: seeding a batch makes PayPal send bursts, and a 429 only delays them (PayPal redelivers for three days). */
 export const WEBHOOK_RATE_LIMIT_PER_MINUTE = 600;
@@ -44,10 +50,9 @@ export const WEBHOOK_RATE_LIMIT_PER_MINUTE = 600;
 export const WEBHOOK_BODY_LIMIT_BYTES = 256 * 1024;
 
 /**
- * 9.6: rejects a replayed delivery. PayPal signs the transmission time together with the body
- * (transmission_id|transmission_time|webhook_id|crc32), so it cannot be changed without failing
- * verification; each redelivery is a new transmission with a new time. Checked before the
- * verification call, so a flood of stale replays never reaches PayPal.
+ * 9.6: rejects a replay of an old delivery. PayPal signs the transmission time together with the
+ * body (transmission_id|transmission_time|webhook_id|crc32), so it cannot be changed without
+ * failing verification. Checked before the verification call, so stale replays never reach PayPal.
  */
 export function checkTransmissionTime(
   header: string | string[] | undefined,
@@ -59,7 +64,7 @@ export function checkTransmissionTime(
   if (Number.isNaN(sent)) return { ok: false, reason: "unreadable paypal-transmission-time" };
   const age = now.getTime() - sent;
   if (age > REPLAY_WINDOW_MS)
-    return { ok: false, reason: `transmission is ${Math.round(age / 60_000)} minutes old` };
+    return { ok: false, reason: `transmission is ${Math.round(age / 3_600_000)} hours old` };
   if (age < -FUTURE_SKEW_MS) return { ok: false, reason: "transmission time is in the future" };
   return { ok: true };
 }
