@@ -197,11 +197,12 @@ export async function executeAction(deps: LoopDeps, actionId: string, policy: Po
       if (!c || isEndState(c.state)) return false;
       await tx
         .update(actions)
+        // The would-be key stays in the record only: the unique column guards real PayPal sends,
+        // and dry runs are not counted as contacts, so the next one has the same stage and key.
         .set({
           status: "executed",
           executedAt: now,
-          idempotencyKey: key,
-          toolCall: { dryRun: true, ...wouldCall },
+          toolCall: { dryRun: true, ...wouldCall, idempotencyKey: key },
         })
         .where(eq(actions.id, actionId));
       await setState(tx, caseId, c.state, "executed");

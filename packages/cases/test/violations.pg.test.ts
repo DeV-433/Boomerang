@@ -129,4 +129,18 @@ describe.skipIf(!hasTestDb)("zero-violation check on executed actions (9.4)", ()
     await executed(held, at(0), "send_reminder", "hold");
     expect(await mine(held)).toEqual([0]);
   });
+
+  it("does not count dry runs: nothing reached the customer", async () => {
+    const id = await newCase({ optedOutAt: at(-1) });
+    await h.db.insert(actions).values({
+      caseId: id,
+      action: "send_reminder",
+      proposedBy: "rules",
+      status: "executed",
+      gateVerdict: "allow",
+      executedAt: at(0),
+      toolCall: { dryRun: true, tool: "send_invoice_reminder" },
+    });
+    expect(await mine(id)).toEqual([]);
+  });
 });

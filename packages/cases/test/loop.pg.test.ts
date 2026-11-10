@@ -383,6 +383,14 @@ describe.skipIf(!hasTestDb)("the core loop without AI (Phase 4)", () => {
       invoiceId: c.paypalRef,
     });
     expect((await caseByRef(h.db, c.paypalRef)).contacts).toBe(0);
+
+    // 9.8: the next dry run on the same stage records again instead of failing on the key.
+    const later = hoursLater(TUESDAY_10AM_NY, 72);
+    const again = await runCaseCheck({ ...live(fake, later), mode: "dry_run" }, c.id);
+    expect(again).toMatchObject({ outcome: "dry_run" });
+    const recorded = await h.db.select().from(actions).where(eq(actions.caseId, c.id));
+    expect(recorded.filter((a) => a.status === "executed")).toHaveLength(2);
+    expect(recorded.every((a) => a.idempotencyKey === null)).toBe(true);
   });
 
   it("never works control-arm cases or cases of a batch that has not started", async () => {

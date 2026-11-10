@@ -16,7 +16,7 @@ export interface Violation {
 const H = 3_600_000;
 
 /**
- * Step 9.4, live half: re-checks every executed action (live or dry run) from the stored facts,
+ * Step 9.4, live half: re-checks every executed live action from the stored facts,
  * independently of the gate that let it through. A violation here means the gate, the executor or
  * an approval path let something past a rule. The result must be empty.
  */
@@ -42,7 +42,14 @@ export async function liveViolations(
     .innerJoin(cases, eq(cases.id, actions.caseId))
     .innerJoin(customers, eq(customers.id, cases.customerId))
     .leftJoin(approvals, eq(approvals.actionId, actions.id))
-    .where(and(eq(actions.status, "executed"), isNotNull(actions.executedAt)))
+    // Dry runs reached nobody and are not counted as contacts by the loop either (store.ts).
+    .where(
+      and(
+        eq(actions.status, "executed"),
+        isNotNull(actions.executedAt),
+        sql`coalesce(${actions.toolCall}->>'dryRun', 'false') <> 'true'`,
+      ),
+    )
     .orderBy(asc(actions.executedAt));
 
   // When each case first saw a dispute: PayPal's dispute event or a reply classified as one.

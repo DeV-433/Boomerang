@@ -29,7 +29,9 @@
     "sim:replay": "npm run replay -w @boomerang/sim --",
     "sim:experiment": "npm run experiment -w @boomerang/sim --",
     "sim:sensitivity": "npm run sensitivity -w @boomerang/sim --",
-    "check:violations": "npm run violations -w @boomerang/sim --"
+    "check:violations": "npm run violations -w @boomerang/sim --",
+    "sim:load": "npm run load -w @boomerang/sim --",
+    "scan:logs": "npm run scan-logs -w @boomerang/sim --"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
