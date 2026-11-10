@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import type { SensitivityResponse, SummaryResponse } from "@boomerang/core";
+import type { SensitivityResponse, SummaryResponse, ViolationsResponse } from "@boomerang/core";
 import {
   batches,
   cases,
@@ -268,6 +268,16 @@ describe.skipIf(!hasTestDb)("dashboard API: operator token and summary (6.2)", (
     expect(sweep).toMatchObject({ strategy: "boomerang-rules", size: 10, seeds: ["a", "b"] });
     expect(sweep!.overall.sameCases).toEqual(spread);
     expect((await app.inject({ method: "GET", url: "/api/sensitivity" })).statusCode).toBe(401);
+  });
+
+  it("serves the zero-violation check (9.4)", async () => {
+    const r = await app.inject({ method: "GET", url: "/api/violations", headers: auth });
+    expect(r.statusCode).toBe(200);
+    const v = r.json<ViolationsResponse>();
+    // The shared test database holds deliberate violations from other tests, so only the shape is checked here.
+    expect(v.total).toBe(v.simulated.violations.length + v.live.violations.length);
+    expect(v.simulated.runs).toBeGreaterThanOrEqual(2); // the two boomerang runs above
+    expect((await app.inject({ method: "GET", url: "/api/violations" })).statusCode).toBe(401);
   });
 
   it("validates its query", async () => {

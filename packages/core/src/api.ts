@@ -518,3 +518,23 @@ export interface SensitivityResponse {
     cells: SensitivityCellView[];
   } | null;
 }
+
+// 9.4: zero-violation check ------------------------------------------------------------------------------
+
+export interface ViolationView {
+  /** Gate rule number (0: executed without an allowing gate verdict or approval). */
+  rule: number;
+  name: string;
+  caseId: string;
+  detail: string;
+  runId?: string;
+  actionId?: string;
+}
+
+export interface ViolationsResponse {
+  checkedAt: string;
+  simulated: { runs: number; cases: number; contacts: number; violations: ViolationView[] };
+  live: { actions: number; contacts: number; violations: ViolationView[] };
+  byRule: Record<string, number>;
+  total: number;
+}

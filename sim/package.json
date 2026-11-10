@@ -13,7 +13,8 @@
     "treatment": "tsx scripts/treatment.ts",
     "replay": "tsx scripts/replay.ts",
     "experiment": "tsx scripts/experiment.ts",
-    "sensitivity": "tsx scripts/sensitivity.ts"
+    "sensitivity": "tsx scripts/sensitivity.ts",
+    "violations": "tsx scripts/violations.ts"
   },
   "dependencies": {
     "seedrandom": "3.0.5",

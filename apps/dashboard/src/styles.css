@@ -1458,3 +1458,11 @@ td.bad {
     display: none;
   }
 }
+
+.violations-list {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  display: grid;
+  gap: 4px;
+}

@@ -81,14 +81,12 @@ describe.skipIf(!hasTestDb)("dashboard API: timeline (8.1)", () => {
       message: { subject: "Reminder: invoice for $125.00", body: "x" },
       executedAt: new Date(NOW.getTime() - 2 * DAY),
     });
-    await h.db
-      .insert(jobs)
-      .values({
-        caseId: open.id,
-        kind: "check_case",
-        runAt: new Date(NOW.getTime() + DAY),
-        reason: "follow up",
-      });
+    await h.db.insert(jobs).values({
+      caseId: open.id,
+      kind: "check_case",
+      runAt: new Date(NOW.getTime() + DAY),
+      reason: "follow up",
+    });
     // A case the gate stopped: opted out (rule 3).
     const stopped = await mk("stopped", {
       state: "stopped",
