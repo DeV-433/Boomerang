@@ -240,10 +240,10 @@ No cut line: every phase is in scope (decided 2026-11-09, step 0.7).
 
 ## Phase 8: Extras (cut first if time is short)
 
-- [x] **8.1 [C]** API: `GET /api/timeline`. *Done when:* returns contacts, scheduled follow-ups, promises and stop markers per case.
-- [ ] **8.2 [C]** Bryntum Scheduler: one row per case, past and future events. *Done when:* a seeded run renders readably for 30 cases.
-- [ ] **8.3 [C]** Markers for promise dates, stopping rules and recovery. *Done when:* a stopped case shows the rule name on hover.
-- [ ] **8.4 [C]** Backup simple timeline inside the audit detail row in case the scheduler trial has limits. *Done when:* the fallback renders without Bryntum.
+- [x] **8.1 [C]** API: `GET /api/timeline`. *Done when:* returns contacts, scheduled follow-ups, promises and stop markers per case. _(Two sources: live cases (executed contacts, pending checks, promise date, PayPal and pay-page events, the closing marker with the deciding gate rule from the audit log) or a stored simulator run (each case's recorded timeline on the simulator clock). Filters `batch`, `case`, paging. Checked read-only on the Render database: 30 rows of the agent run, 53 contacts, 9 promises, 8 stops; the 5 organic cases with their real follow-ups.)_
+- [x] **8.2 [C]** Bryntum Scheduler: one row per case, past and future events. *Done when:* a seeded run renders readably for 30 cases. _(Timeline page, lazy-loaded; Bryntum 8.0.0 moved into `apps/dashboard`, licence set once at startup. On Render: the demo-1 agent run, 30 rows per page of 150, 98 events, icon per kind plus legend, future checks and promises outlined, "now" line on live cases. The key is a Bryntum trial licence (ends 2026-12-24), so a "Trial" badge shows.)_
+- [x] **8.3 [C]** Markers for promise dates, stopping rules and recovery. *Done when:* a stopped case shows the rule name on hover. _(On Render, hovering an opted-out stop shows "Gate rule 3: opted out"; live stops take the rule from the deciding `gated` audit entry.)_
+- [x] **8.4 [C]** Backup simple timeline inside the audit detail row in case the scheduler trial has limits. *Done when:* the fallback renders without Bryntum. _(Plain HTML/CSS markers with glyphs and hover titles above the case trail; on Render the $75 case's row shows its 5 markers and the Bryntum bundle is never loaded on that page.)_
 - [ ] **8.5 [S]** Subscription lane polish: manual-retry trigger after a customer updates payment. *Done when:* the case moves on after a retry event.
 - [ ] **8.6 [C]** Balance capture request as a gated, approval-required action. *Done when:* approving it captures the balance in the sandbox.
 
