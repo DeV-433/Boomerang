@@ -5,6 +5,7 @@ import { api } from "../api";
 import { count, dateTime, money, pct, points, usd } from "../format";
 import { IntervalPlot, type IntervalRow } from "../IntervalPlot";
 import { SimSettingsPanel } from "../SimSettingsPanel";
+import { SensitivityCard } from "../SensitivityCard";
 
 /** Dollars large, cents small and muted, like a ledger total. */
 function BigMoney({ cents }: { cents: number }) {
@@ -246,7 +247,9 @@ export function Summary() {
             )}
           </section>
 
-          <section className="card span-5">
+          <SensitivityCard className="span-9" />
+
+          <section className="card span-6">
             <h2>All metrics</h2>
             <table>
               <thead>
@@ -281,7 +284,7 @@ export function Summary() {
             </p>
           </section>
 
-          <LiveCard s={s} className="span-4" />
+          <LiveCard s={s} className="span-6" />
         </div>
       ) : (
         <div className="bento">
@@ -289,6 +292,7 @@ export function Summary() {
             <h2>Simulated result</h2>
             <p className="muted">No finished simulation runs for this batch yet.</p>
           </section>
+          <SensitivityCard className="span-12" />
           <LiveCard s={s} className="span-12" />
         </div>
       )}

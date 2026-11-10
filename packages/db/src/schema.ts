@@ -320,6 +320,21 @@ export const simCaseResults = pgTable(
   (t) => [primaryKey({ columns: [t.runId, t.caseId] })],
 );
 
+/**
+ * 9.2: a sensitivity sweep. Batches planned in memory for several seeds and simulator variations;
+ * only the summary and per-cell results are stored (see sim/src/sensitivity.ts).
+ */
+export const simSensitivity = pgTable("sim_sensitivity", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  strategy: text("strategy").notNull(),
+  size: integer("size").notNull(),
+  seeds: jsonb("seeds").notNull(),
+  /** The simulator config the variations were applied to. */
+  baseConfig: jsonb("base_config").notNull(),
+  result: jsonb("result").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // 4.14: scheduled case checks ----------------------------------------------------------------------------
 
 export const jobStatusEnum = pgEnum("job_status", ["pending", "running", "done", "cancelled", "failed"]);

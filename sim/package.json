@@ -12,7 +12,8 @@
     "test": "vitest run --passWithNoTests",
     "treatment": "tsx scripts/treatment.ts",
     "replay": "tsx scripts/replay.ts",
-    "experiment": "tsx scripts/experiment.ts"
+    "experiment": "tsx scripts/experiment.ts",
+    "sensitivity": "tsx scripts/sensitivity.ts"
   },
   "dependencies": {
     "seedrandom": "3.0.5",

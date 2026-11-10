@@ -1,8 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import type { SummaryResponse } from "@boomerang/core";
-import { batches, cases, customers, simRuns, type DbHandle } from "@boomerang/db";
+import type { SensitivityResponse, SummaryResponse } from "@boomerang/core";
+import {
+  batches,
+  cases,
+  customers,
+  simCaseResults,
+  simRuns,
+  simSensitivity,
+  type DbHandle,
+} from "@boomerang/db";
 import { hasTestDb, setupTestDb } from "@boomerang/db/testing";
 import type { WebhookVerifier } from "@boomerang/paypal";
 import { buildApp } from "../src/app";
@@ -49,14 +57,15 @@ describe.skipIf(!hasTestDb)("dashboard API: operator token and summary (6.2)", (
       experimentGroup: arm,
       simulated: true,
     });
-    await h.db
+    const caseRows = await h.db
       .insert(cases)
       .values([
         mk("control", 10_000, 10_000),
         mk("control", 30_000, 0),
         mk("treatment", 20_000, 20_000),
         mk("treatment", 20_000, 0),
-      ]);
+      ])
+      .returning();
 
     const metrics = (rate: number, atRisk: number) => ({
       cases: 2,
@@ -71,36 +80,60 @@ describe.skipIf(!hasTestDb)("dashboard API: operator token and summary (6.2)", (
       optOuts: 0,
       contactsAfterOptOut: 0,
     });
-    await h.db.insert(simRuns).values([
-      {
-        batchId,
-        arm: "control",
-        strategy: "baseline-fixed-schedule",
-        seed: "s",
-        simConfig: {},
-        metrics: metrics(0.6, 40_000),
-        finishedAt: new Date(),
-      },
-      {
-        batchId,
-        arm: "treatment",
-        strategy: "boomerang-rules",
-        seed: "s",
-        simConfig: {},
-        metrics: metrics(0.5, 40_000),
-        finishedAt: new Date(),
-      },
-      {
-        batchId,
-        arm: "treatment",
-        strategy: "boomerang-agent",
-        seed: "s",
-        simConfig: {},
-        metrics: metrics(0.55, 40_000),
-        finishedAt: new Date(),
-      },
-      { batchId, arm: "treatment", strategy: "boomerang-rules", seed: "s", simConfig: {}, metrics: null }, // unfinished: ignored
-    ]);
+    const runRows = await h.db
+      .insert(simRuns)
+      .values([
+        {
+          batchId,
+          arm: "control",
+          strategy: "baseline-fixed-schedule",
+          seed: "s",
+          simConfig: {},
+          metrics: metrics(0.6, 40_000),
+          finishedAt: new Date(),
+        },
+        {
+          batchId,
+          arm: "treatment",
+          strategy: "boomerang-rules",
+          seed: "s",
+          simConfig: {},
+          metrics: metrics(0.5, 40_000),
+          finishedAt: new Date(),
+        },
+        {
+          batchId,
+          arm: "treatment",
+          strategy: "boomerang-agent",
+          seed: "s",
+          simConfig: {},
+          metrics: metrics(0.55, 40_000),
+          finishedAt: new Date(),
+        },
+        { batchId, arm: "treatment", strategy: "boomerang-rules", seed: "s", simConfig: {}, metrics: null }, // unfinished: ignored
+      ])
+      .returning();
+    // Per-case results of the control run and the agent run, for the interval (9.1).
+    const result = (runId: string, c: (typeof caseRows)[number], recovered: number) => ({
+      runId,
+      caseId: c.id,
+      outcome: recovered > 0 ? "recovered" : "unrecovered",
+      amountCents: c.amountCents,
+      recoveredCents: recovered,
+      contacts: 1,
+      contactsAfterOptOut: 0,
+      timeline: [],
+    });
+    const control = caseRows.filter((c) => c.experimentGroup === "control");
+    const treatment = caseRows.filter((c) => c.experimentGroup === "treatment");
+    await h.db
+      .insert(simCaseResults)
+      .values([
+        result(runRows[0]!.id, control[0]!, 10_000),
+        result(runRows[0]!.id, control[1]!, 0),
+        result(runRows[2]!.id, treatment[0]!, 20_000),
+        result(runRows[2]!.id, treatment[1]!, 0),
+      ]);
   });
   afterAll(async () => {
     await app?.close();
@@ -180,6 +213,61 @@ describe.skipIf(!hasTestDb)("dashboard API: operator token and summary (6.2)", (
     ).json<SummaryResponse>();
     expect(chosen.simulated.treatment?.id).toBe(rules.id);
     expect(chosen.simulated.upliftPoints).toBeCloseTo(-10);
+  });
+
+  it("adds the uplift interval and the simulator settings with the seed (9.1, 9.3)", async () => {
+    const s = (
+      await app.inject({ method: "GET", url: `/api/summary?batch=${batchId}`, headers: auth })
+    ).json<SummaryResponse>();
+    const i = s.simulated.interval!;
+    expect(i.level).toBe(0.95);
+    expect(i.iterations).toBe(2000);
+    expect(i.low).toBeLessThanOrEqual(i.high);
+    // Rates from the stored results: control 10k of 40k, treatment 20k of 40k.
+    expect(i.low).toBeLessThanOrEqual(25);
+    expect(i.high).toBeGreaterThanOrEqual(25);
+    expect(s.simulated.sameCases).toBeNull(); // not stored with this run
+    expect(s.simulated.settings).toMatchObject({
+      seed: "s",
+      batchName: "summary",
+      batchSize: 4,
+      batchMode: "offline",
+      sameConfigBothArms: true,
+      config: {},
+    });
+    expect(s.simulated.settings!.configHash).toMatch(/^[0-9a-f]{12}$/);
+    // A treatment run without per-case results has no interval.
+    const rules = s.simulated.runs.find((r) => r.strategy === "boomerang-rules")!;
+    const chosen = (
+      await app.inject({
+        method: "GET",
+        url: `/api/summary?batch=${batchId}&treatmentRun=${rules.id}`,
+        headers: auth,
+      })
+    ).json<SummaryResponse>();
+    expect(chosen.simulated.interval).toBeNull();
+  });
+
+  it("serves the latest sensitivity sweep (9.2)", async () => {
+    const spread = { min: -2, median: 1, max: 4, positiveShare: 0.6 };
+    await h.db.insert(simSensitivity).values({
+      strategy: "boomerang-rules",
+      size: 10,
+      seeds: ["a", "b"],
+      baseConfig: { v: 1 },
+      result: {
+        variations: [{ id: "base", label: "As configured", sameCases: spread, vsControl: spread }],
+        overall: { sameCases: spread, vsControl: spread },
+        cells: [],
+      },
+      createdAt: new Date(Date.now() + 86_400_000),
+    });
+    const r = await app.inject({ method: "GET", url: "/api/sensitivity", headers: auth });
+    expect(r.statusCode).toBe(200);
+    const { sweep } = r.json<SensitivityResponse>();
+    expect(sweep).toMatchObject({ strategy: "boomerang-rules", size: 10, seeds: ["a", "b"] });
+    expect(sweep!.overall.sameCases).toEqual(spread);
+    expect((await app.inject({ method: "GET", url: "/api/sensitivity" })).statusCode).toBe(401);
   });
 
   it("validates its query", async () => {

@@ -481,3 +481,40 @@ export interface TimelineResponse {
   range: { start: string; end: string };
   now: string;
 }
+
+// 9.2: sensitivity --------------------------------------------------------------------------------------
+
+export interface SpreadPoints {
+  min: number;
+  median: number;
+  max: number;
+  /** Share of cells above zero. */
+  positiveShare: number;
+}
+
+export interface SensitivityCellView {
+  variation: string;
+  seed: string;
+  cases: number;
+  controlRate: number;
+  treatmentRate: number;
+  baselineOnTreatmentRate: number;
+  /** Percentage points. */
+  upliftVsControl: number;
+  upliftSameCases: number;
+  contactsAfterOptOut: number;
+}
+
+export interface SensitivityResponse {
+  sweep: {
+    id: string;
+    createdAt: string;
+    strategy: string;
+    size: number;
+    seeds: string[];
+    configHash: string;
+    variations: { id: string; label: string; sameCases: SpreadPoints; vsControl: SpreadPoints }[];
+    overall: { sameCases: SpreadPoints; vsControl: SpreadPoints };
+    cells: SensitivityCellView[];
+  } | null;
+}

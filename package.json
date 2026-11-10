@@ -27,7 +27,8 @@
     "sim:baseline": "npm run baseline -w @boomerang/sim --",
     "sim:treatment": "npm run treatment -w @boomerang/sim --",
     "sim:replay": "npm run replay -w @boomerang/sim --",
-    "sim:experiment": "npm run experiment -w @boomerang/sim --"
+    "sim:experiment": "npm run experiment -w @boomerang/sim --",
+    "sim:sensitivity": "npm run sensitivity -w @boomerang/sim --"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

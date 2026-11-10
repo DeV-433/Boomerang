@@ -140,6 +140,7 @@ h1 {
   background: var(--ink);
 }
 .top-actions {
+  white-space: nowrap;
   display: flex;
   justify-content: flex-end;
   align-items: center;
@@ -526,6 +527,14 @@ thead th {
 }
 tbody th {
   font-weight: 500;
+}
+@media (max-width: 1240px) {
+  .top-actions .badge-label {
+    display: none;
+  }
+  .nav a {
+    padding: 8px 12px;
+  }
 }
 @media (max-width: 900px) {
   .shell {
@@ -1086,6 +1095,12 @@ td.bad {
 .span-7 {
   grid-column: span 7;
 }
+.span-6 {
+  grid-column: span 6;
+}
+.span-9 {
+  grid-column: span 9;
+}
 .span-12 {
   grid-column: span 12;
 }
@@ -1101,6 +1116,12 @@ td.bad {
   .span-5,
   .span-7 {
     grid-column: span 6;
+  }
+  .span-9 {
+    grid-column: span 12;
+  }
+  .rows-2 {
+    grid-row: auto;
   }
 }
 @media (max-width: 800px) {
@@ -1195,7 +1216,7 @@ td.bad {
 .ci-value {
   grid-area: value;
 }
-.ci-ticks {
+.ci-axis .ci-ticks {
   grid-area: track;
 }
 .ci-name {
@@ -1312,5 +1333,128 @@ td.bad {
   :root {
     /* Validated against the dark card surface (dataviz lightness band). */
     --series-1: #e8692a;
+  }
+}
+
+/* 9.2: sensitivity strip plot. */
+.sens-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
+  gap: 20px;
+  align-items: start;
+}
+.sens-range {
+  font-size: 44px;
+  margin-top: 4px;
+}
+.sens-range .muted {
+  font-size: 24px;
+}
+.sens-tiles {
+  margin-top: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.strip {
+  display: grid;
+  gap: 6px;
+  margin-top: 20px;
+}
+.strip-row {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr) 150px;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+}
+.strip-strong {
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+.strip-name {
+  color: var(--text);
+}
+.strip-track {
+  position: relative;
+  height: 20px;
+}
+.strip-track:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.strip-bar {
+  position: absolute;
+  top: 7px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--series-1-track);
+}
+.strip-strong .strip-bar {
+  background: var(--series-1);
+  opacity: 0.45;
+  height: 8px;
+  top: 6px;
+}
+.strip-dot {
+  position: absolute;
+  top: 6px;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  border-radius: 50%;
+  background: var(--series-1);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.strip-median {
+  position: absolute;
+  top: 2px;
+  height: 16px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--text);
+}
+.strip-value {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.strip-value strong {
+  color: var(--text);
+}
+.strip-key {
+  color: var(--muted);
+  font-size: 11px;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+.table-scroll table {
+  max-width: none;
+}
+@media (max-width: 800px) {
+  .sens-head {
+    grid-template-columns: 1fr;
+  }
+  .strip-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "name value" "track track";
+    gap: 2px 10px;
+  }
+  .strip-name {
+    grid-area: name;
+  }
+  .strip-track,
+  .strip-axis .ci-ticks {
+    grid-area: track;
+  }
+  .strip-value {
+    grid-area: value;
+  }
+  .strip-axis > div:first-child,
+  .strip-key {
+    display: none;
   }
 }

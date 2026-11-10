@@ -6,6 +6,7 @@ import { auditRoutes } from "./audit";
 import { caseRoutes } from "./cases";
 import { summaryRoutes } from "./summary";
 import { systemRoutes } from "./system";
+import { sensitivityRoutes } from "./sensitivity";
 import { timelineRoutes } from "./timeline";
 import { trustRoutes } from "./trust";
 import { whatIfRoutes } from "./whatif";
@@ -46,4 +47,5 @@ export async function operatorRoutes(
   await app.register(whatIfRoutes, deps);
   await app.register(trustRoutes, deps);
   await app.register(timelineRoutes, deps);
+  await app.register(sensitivityRoutes, deps);
 }

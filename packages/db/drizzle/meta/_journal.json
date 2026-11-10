@@ -57,6 +57,13 @@
       "when": 1794298968223,
       "tag": "0007_payment_updated",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794338270984,
+      "tag": "0008_sensitivity",
+      "breakpoints": true
     }
   ]
 }

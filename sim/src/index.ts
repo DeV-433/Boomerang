@@ -58,3 +58,13 @@ export {
   type WhatIfResult,
   type RunComparison,
 } from "./replay";
+export {
+  runSensitivity,
+  plannedArms,
+  spread,
+  VARIATIONS,
+  type Variation,
+  type SensitivityCell,
+  type SensitivitySummary,
+  type Spread,
+} from "./sensitivity";
