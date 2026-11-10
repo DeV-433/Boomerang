@@ -474,3 +474,42 @@ describe("classifier calendar", () => {
     ]);
   });
 });
+
+describe("no personal data or secrets reach the model (9.7)", () => {
+  it("decision, drafting and redraft requests carry no names, emails, PayPal ids or configured secrets", async () => {
+    const secrets = {
+      PAYPAL_CLIENT_SECRET: "sk-paypal-test-0123456789",
+      PAY_LINK_SECRET: "pay-link-secret-0123456789",
+      OPERATOR_TOKEN: "operator-token-0123456789",
+      SIM_WEBHOOK_SECRET: "sim-secret-0123456789",
+      GROQ_API_KEY: "gsk_test_0123456789",
+    };
+    const saved = Object.fromEntries(Object.keys(secrets).map((k) => [k, process.env[k]]));
+    Object.assign(process.env, secrets);
+    try {
+      const s = snap({ customerName: "Ada Lovelace", paypalRef: "INV2-PIIX-PIIX-PIIX-PIIX" });
+      const { client, seen } = scripted({
+        decide: [decision({ case_id: s.id })],
+        // The first note fails the message lint (a promise of a discount), so a redraft is requested.
+        draft: [
+          note("We can offer you a 50% discount today."),
+          note("Just a friendly reminder about this invoice."),
+        ],
+      });
+      await agentProposer({ client })(s, diagnose(s, NOW), NOW);
+      expect(seen.map((r) => r.kind)).toContain("decide");
+      expect(seen.some((r) => r.kind === "draft")).toBe(true);
+      for (const r of seen) {
+        const sent = `${r.system}\n${r.input}`;
+        expect(sent).not.toMatch(/Ada|Lovelace|@example\.com/);
+        expect(sent).not.toContain(s.paypalRef);
+        for (const v of Object.values(secrets)) expect(sent).not.toContain(v);
+      }
+    } finally {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  });
+});
