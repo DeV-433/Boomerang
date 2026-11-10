@@ -275,7 +275,11 @@ describe.skipIf(!hasTestDb)("dashboard API: operator token and summary (6.2)", (
     expect(r.statusCode).toBe(200);
     const v = r.json<ViolationsResponse>();
     // The shared test database holds deliberate violations from other tests, so only the shape is checked here.
-    expect(v.total).toBe(v.simulated.violations.length + v.live.violations.length);
+    // Lists are capped at 100 each; the total stays exact.
+    expect(v.simulated.violations.length).toBeLessThanOrEqual(100);
+    expect(v.live.violations.length).toBeLessThanOrEqual(100);
+    expect(v.total).toBeGreaterThanOrEqual(v.simulated.violations.length + v.live.violations.length);
+    expect(v.total).toBe(Object.values(v.byRule).reduce((a, b) => a + b, 0));
     expect(v.simulated.runs).toBeGreaterThanOrEqual(2); // the two boomerang runs above
     expect((await app.inject({ method: "GET", url: "/api/violations" })).statusCode).toBe(401);
   });
