@@ -158,7 +158,7 @@ export function Cases() {
         minWidth: 180,
         flex: 1.4,
         valueGetter: (p) => p.data?.customer ?? p.data?.customerEmail ?? "",
-        tooltipValueGetter: (p) => p.data?.paypalRef,
+        tooltip: (p) => p.data?.paypalRef,
       },
       {
         field: "lane",

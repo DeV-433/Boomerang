@@ -39,9 +39,5 @@
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.1",
     "vitest": "5.1.0"
-  },
-  "dependencies": {
-    "@bryntum/scheduler-enterprise": "8.0.0",
-    "@bryntum/scheduler-react-enterprise": "8.0.0"
   }
 }

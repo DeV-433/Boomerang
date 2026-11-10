@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { lazy, Suspense } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import { api, API_URL, setToken, type Health } from "./api";
 import { useToken } from "./auth";
@@ -12,6 +13,9 @@ import { Trust } from "./pages/Trust";
 import { WhatIf } from "./pages/WhatIf";
 import { PauseButton, PausedBanner } from "./SystemControl";
 
+// The scheduler is large: load it only when the Timeline page opens.
+const Timeline = lazy(() => import("./pages/Timeline").then((m) => ({ default: m.Timeline })));
+
 const NAV = [
   { to: "/", label: "Summary" },
   { to: "/cases", label: "Cases" },
@@ -19,6 +23,7 @@ const NAV = [
   { to: "/audit", label: "Audit" },
   { to: "/whatif", label: "What-if" },
   { to: "/trust", label: "Trust" },
+  { to: "/timeline", label: "Timeline" },
 ];
 
 function HealthBadge() {
@@ -74,6 +79,14 @@ export function App() {
             <Route path="/audit" element={<Audit />} />
             <Route path="/whatif" element={<WhatIf />} />
             <Route path="/trust" element={<Trust />} />
+            <Route
+              path="/timeline"
+              element={
+                <Suspense fallback={<p className="muted">Loading the timeline...</p>}>
+                  <Timeline />
+                </Suspense>
+              }
+            />
             <Route path="*" element={<Placeholder title="Not found" />} />
           </Routes>
         )}

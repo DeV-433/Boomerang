@@ -698,3 +698,152 @@ td.bad {
 .scoreboard {
   max-width: none;
 }
+
+/* Phase 8: timeline ------------------------------------------------------------------------------ */
+:root {
+  --tl-opened: #7a7a74;
+  --tl-contact: #2f6fd3;
+  --tl-followup: #5b5bd6;
+  --tl-promise: #8a4fd0;
+  --tl-paypal: #1d8a8a;
+  --tl-page: #c2407a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --tl-opened: #a3a39c;
+    --tl-contact: #7aa7f0;
+    --tl-followup: #9d9df0;
+    --tl-promise: #be95ef;
+    --tl-paypal: #5cc4c4;
+    --tl-page: #ee8cb6;
+  }
+}
+.spacer {
+  flex: 1;
+}
+.tl-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.tl-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tl-dashed {
+  display: inline-block;
+  width: 18px;
+  height: 10px;
+  border: 2px solid var(--muted);
+  border-radius: 3px;
+}
+.tl-host {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 240px;
+}
+.tl-sub {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.2;
+}
+.tl-tip {
+  max-width: 320px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.tl-tip-when {
+  opacity: 0.8;
+}
+.tl-tip-rule {
+  margin-top: 4px;
+  font-weight: 600;
+}
+.tl-tip-detail {
+  margin-top: 4px;
+  white-space: pre-wrap;
+}
+/* Bryntum's event content resets the font; keep the icon font on the bar icons. */
+.tl-host .b-sch-event-content i.fa {
+  font-family: "Font Awesome 6 Free";
+  font-weight: 900;
+  font-size: 10px;
+  line-height: 1;
+}
+.tl-host .b-sch-event {
+  justify-content: center;
+  padding-inline: 0;
+}
+.tl-host .b-sch-event-content {
+  margin: 0;
+}
+/* 8.4: the plain fallback timeline in the audit detail row (no Bryntum). */
+.mini-tl {
+  padding: 10px 16px 6px;
+  background: var(--surface);
+}
+.mini-tl-track {
+  position: relative;
+  height: 28px;
+  margin: 0 12px;
+}
+.mini-tl-line {
+  position: absolute;
+  top: 14px;
+  left: 0;
+  right: 0;
+  border-top: 2px solid var(--border);
+}
+.mini-tl-now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 2px solid var(--bad);
+  opacity: 0.6;
+}
+.mini-tl-mark {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--c);
+  border: 2px solid var(--surface);
+  cursor: default;
+}
+.mini-tl-mark.future {
+  background: var(--surface);
+  color: var(--c);
+  border: 2px solid var(--c);
+}
+.mini-tl-axis {
+  display: flex;
+  justify-content: space-between;
+  margin: 2px 0 0;
+}
+.mini-tl-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin-top: 2px;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

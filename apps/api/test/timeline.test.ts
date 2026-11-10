@@ -236,6 +236,13 @@ describe.skipIf(!hasTestDb)("dashboard API: timeline (8.1)", () => {
     expect(t.range).toEqual({ start: day(-1), end: day(31) });
   });
 
+  it("returns just one case for the audit screen's small timeline (8.4)", async () => {
+    const t = await get(`/api/timeline?case=${ids.stopped}`);
+    expect(t.rows.map((r) => r.caseId)).toEqual([ids.stopped]);
+    expect(new Set(t.events.map((e) => e.caseId))).toEqual(new Set([ids.stopped]));
+    expect(t.events.find((e) => e.kind === "stopped")?.rule).toEqual({ number: 3, name: "opted_out" });
+  });
+
   it("pages, validates and requires the token", async () => {
     const first = await get(`/api/timeline?batch=${batchId}&limit=2`);
     const second = await get(`/api/timeline?batch=${batchId}&limit=2&offset=2`);

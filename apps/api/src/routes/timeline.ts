@@ -20,6 +20,8 @@ const Query = z.object({
   run: z.union([z.literal("latest"), z.string().uuid()]).default("latest"),
   /** Live only: one seeded batch, or organic cases (not from any batch). */
   batch: z.union([z.literal("organic"), z.string().uuid()]).optional(),
+  /** Live only: just this case (the audit screen's small timeline). */
+  case: z.string().uuid().optional(),
   offset: z.coerce.number().int().min(0).default(0),
   limit: z.coerce.number().int().min(1).max(200).default(30),
 });
@@ -218,8 +220,9 @@ export async function timelineRoutes(app: FastifyInstance, deps: AppDeps): Promi
     }
 
     // Live cases, newest first.
-    const filter =
-      q.batch === "organic"
+    const filter = q.case
+      ? eq(cases.id, q.case)
+      : q.batch === "organic"
         ? and(eq(cases.simulated, false), sql`${cases.batchId} is null`)
         : q.batch
           ? eq(cases.batchId, q.batch)

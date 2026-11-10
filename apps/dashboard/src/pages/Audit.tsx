@@ -13,6 +13,7 @@ import { api, download } from "../api";
 import { describeEntry } from "../auditText";
 import { setupGrid, useGridTheme } from "../grid";
 import { LiveBadge, useLiveGrid } from "../live";
+import { MiniTimeline } from "../MiniTimeline";
 
 setupGrid();
 
@@ -45,10 +46,41 @@ const detailColumns: ColDef<AuditEntry>[] = [
     flex: 1,
     minWidth: 300,
     valueGetter: (p) => (p.data ? describeEntry(p.data) : ""),
-    tooltipValueGetter: (p) => (p.data ? JSON.stringify(p.data.data, null, 2) : ""),
+    tooltip: (p) => (p.data ? JSON.stringify(p.data.data, null, 2) : ""),
   },
   { field: "id", headerName: "Entry", width: 90 },
 ];
+
+/**
+ * The expanded row: the case's small timeline (8.4, plain HTML, no Bryntum) above its whole trail.
+ */
+function CaseDetail({ data }: { data: AuditListRow }) {
+  const theme = useGridTheme();
+  const [rows, setRows] = useState<AuditEntry[] | null>(null);
+  useEffect(() => {
+    if (!data.caseId) return;
+    let live = true;
+    api<CaseAuditResponse>(`/api/cases/${data.caseId}/audit`)
+      .then((r) => live && setRows(r.entries))
+      .catch(() => live && setRows([]));
+    return () => {
+      live = false;
+    };
+  }, [data.caseId]);
+  return (
+    <div className="audit-detail">
+      {data.caseId && <MiniTimeline caseId={data.caseId} />}
+      <AgGridReact<AuditEntry>
+        theme={theme}
+        rowData={rows}
+        columnDefs={detailColumns}
+        defaultColDef={{ resizable: true, suppressHeaderMenuButton: true }}
+        tooltipShowDelay={300}
+        domLayout="autoHeight"
+      />
+    </div>
+  );
+}
 
 export function Audit() {
   const theme = useGridTheme();
@@ -135,7 +167,7 @@ export function Audit() {
         flex: 1,
         minWidth: 260,
         valueGetter: (p) => (p.data ? describeEntry(p.data) : ""),
-        tooltipValueGetter: (p) => (p.data ? JSON.stringify(p.data.data, null, 2) : ""),
+        tooltip: (p) => (p.data ? JSON.stringify(p.data.data, null, 2) : ""),
       },
       { field: "caseState", headerName: "Case now", width: 120 },
     ],
@@ -191,19 +223,7 @@ export function Audit() {
           masterDetail
           isRowMaster={(d) => Boolean(d?.caseId)}
           detailRowAutoHeight
-          detailCellRendererParams={{
-            detailGridOptions: {
-              columnDefs: detailColumns,
-              defaultColDef: { resizable: true, suppressHeaderMenuButton: true },
-              tooltipShowDelay: 300,
-              domLayout: "autoHeight",
-            },
-            getDetailRowData: (p: { data: AuditListRow; successCallback: (rows: AuditEntry[]) => void }) => {
-              api<CaseAuditResponse>(`/api/cases/${p.data.caseId}/audit`)
-                .then((r) => p.successCallback(r.entries))
-                .catch(() => p.successCallback([]));
-            },
-          }}
+          detailCellRenderer={CaseDetail}
           getRowId={(p: GetRowIdParams<AuditListRow>) => String(p.data.id)}
           pagination
           paginationPageSize={50}

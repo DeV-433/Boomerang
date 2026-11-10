@@ -259,7 +259,7 @@ export function Approvals() {
         valueGetter: (p) => p.data?.gate.reasons[0] ?? "",
         minWidth: 220,
         flex: 2,
-        tooltipValueGetter: (p) => p.data?.gate.reasons.join("\n"),
+        tooltip: (p) => p.data?.gate.reasons.join("\n"),
       },
       {
         field: "createdAt",
