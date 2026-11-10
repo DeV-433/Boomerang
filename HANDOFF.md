@@ -6,7 +6,7 @@ This file holds no secrets: the values live in `.env`, which is git-ignored and 
 ---
 
 You are continuing **Boomerang**, a PayPal revenue-recovery agent, built step by step from `BUILD_PLAN.md` at the
-repository root. Phases 0 to 8 are done (only 2.6 remains open, see below). **Start at Phase 9 and work onward through Phase 10**, one phase at a time.
+repository root. Phases 0 to 10 are done, verified offline (see `BUILD_PLAN.md` "Current status"). **What is left needs the Render database, the PayPal sandbox dashboard or the project documentation**: listed under "First thing to do" below.
 Read `BUILD_PLAN.md` first, especially "Current status (read this first)" and its "Decisions that differ from the text
 of this plan" table: those decisions override the plan's original wording and the project documentation.
 
@@ -56,26 +56,26 @@ also sources the file with bash).
 
 Copy `.env` from the old machine over a private channel. Check keys by length only, never echo them.
 
-| Variable | What it is |
-| --- | --- |
-| `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | PayPal **sandbox** REST app |
-| `PAYPAL_ENVIRONMENT` | `SANDBOX` |
-| `PAYPAL_WEBHOOK_ID` | the sandbox webhook pointing at the deployed API (16 event types) |
-| `PAYPAL_SANDBOX_MERCHANT_EMAIL`, `PAYPAL_SANDBOX_CUSTOMER_EMAIL` | sandbox business account and the original US personal account |
-| `POLICY_MODE` | `dry_run` locally unless a step says otherwise |
-| `PAY_LINK_SECRET` | HMAC secret for pay links; must equal the value on the Render API and worker |
-| `SIM_WEBHOOK_SECRET` | signs the simulator's synthetic webhooks |
-| `DATABASE_URL` | local Docker Postgres |
-| `RENDER_DATABASE_URL` | external URL of the Render Postgres, for read-only inspection and for seeding/simulating `demo-1` |
-| `GROQ_API_KEY` | Groq key (free tier, shared with the Render worker) |
-| `GROQ_API_KEYS` | local only: teammates' Groq keys, comma-separated, rotated by simulations and evals; **never set on Render** |
-| `GROQ_RPM` | request pacing (25) |
-| `OPERATOR_TOKEN` | bearer token for `/api/*`; typed into the dashboard |
-| `DASHBOARD_ORIGINS` | CORS allow-list for the API |
-| `PUBLIC_BASE_URL`, `MERCHANT_NAME` | pay-page base URL and the merchant name it shows |
-| `VITE_AG_GRID_LICENSE_KEY` | AG Grid Enterprise key (also on the Render static site) |
-| `VITE_BRYNTUM_LICENSE_KEY` | Bryntum Scheduler trial licence, ends 2026-12-24 (a "Trial" badge is expected) |
-| `GEMINI_API_KEY`, `GEMINI_RPM` | unused leftovers from before the switch to Groq |
+| Variable                                                         | What it is                                                                                                   |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`                       | PayPal **sandbox** REST app                                                                                  |
+| `PAYPAL_ENVIRONMENT`                                             | `SANDBOX`                                                                                                    |
+| `PAYPAL_WEBHOOK_ID`                                              | the sandbox webhook pointing at the deployed API (16 event types)                                            |
+| `PAYPAL_SANDBOX_MERCHANT_EMAIL`, `PAYPAL_SANDBOX_CUSTOMER_EMAIL` | sandbox business account and the original US personal account                                                |
+| `POLICY_MODE`                                                    | `dry_run` locally unless a step says otherwise                                                               |
+| `PAY_LINK_SECRET`                                                | HMAC secret for pay links; must equal the value on the Render API and worker                                 |
+| `SIM_WEBHOOK_SECRET`                                             | signs the simulator's synthetic webhooks                                                                     |
+| `DATABASE_URL`                                                   | local Docker Postgres                                                                                        |
+| `RENDER_DATABASE_URL`                                            | external URL of the Render Postgres, for read-only inspection and for seeding/simulating `demo-1`            |
+| `GROQ_API_KEY`                                                   | Groq key (free tier, shared with the Render worker)                                                          |
+| `GROQ_API_KEYS`                                                  | local only: teammates' Groq keys, comma-separated, rotated by simulations and evals; **never set on Render** |
+| `GROQ_RPM`                                                       | request pacing (25)                                                                                          |
+| `OPERATOR_TOKEN`                                                 | bearer token for `/api/*`; typed into the dashboard                                                          |
+| `DASHBOARD_ORIGINS`                                              | CORS allow-list for the API                                                                                  |
+| `PUBLIC_BASE_URL`, `MERCHANT_NAME`                               | pay-page base URL and the merchant name it shows                                                             |
+| `VITE_AG_GRID_LICENSE_KEY`                                       | AG Grid Enterprise key (also on the Render static site)                                                      |
+| `VITE_BRYNTUM_LICENSE_KEY`                                       | Bryntum Scheduler trial licence, ends 2026-12-24 (a "Trial" badge is expected)                               |
+| `GEMINI_API_KEY`, `GEMINI_RPM`                                   | unused leftovers from before the switch to Groq                                                              |
 
 ## Deployment (Render, blueprint `render.yaml`)
 
@@ -88,9 +88,9 @@ Copy `.env` from the old machine over a private channel. Check keys by length on
 
 ## How to work
 
-- One phase at a time. Finish Phase 9, report, and **stop before Phase 10** until told to go on. Pause whenever input
+- One step at a time. Pause whenever input
   from the user is needed (accounts, keys, approving something in the PayPal sandbox or the dashboard).
-- Prove each step's *Done when* against the real PayPal sandbox and the deployed Render services where possible, then
+- Prove each step's _Done when_ against the real PayPal sandbox and the deployed Render services where possible, then
   tick it in `BUILD_PLAN.md` with a short italic note of what was verified. Keep "Current status" current.
 - Commit and push after each step, with the step id in the message (e.g. `feat(9.4): ...`, `docs(plan): ...`), ending
   with the agreed co-author trailer.
@@ -139,4 +139,16 @@ Copy `.env` from the old machine over a private channel. Check keys by length on
 ## First thing to do
 
 Run `npm run ci`, check `https://boomerang-api-rgd8.onrender.com/healthz`, read `BUILD_PLAN.md` "Current status",
-then begin **Phase 9 (9.1: the full control-versus-treatment experiment)**.
+then finish the items that need secrets or accounts (they were built on a machine without `.env`):
+
+1. Against the Render database (read-only except the sweep row): `DATABASE_URL=$RENDER_DATABASE_URL npm run sim:sensitivity`
+   so the deployed summary shows the range (9.2), and `npm run check:violations -- --database render` (9.4).
+   Do **not** run `demo:reset` there (it refuses anyway) or re-seed `demo-1`.
+2. Sign in to the deployed dashboard and confirm demo-1's summary shows the uplift interval and settings (9.1, 9.3).
+3. In the PayPal sandbox dashboard: the webhook still targets the Render API with every event subscribed, and, by
+   failing one delivery on purpose, whether a retry carries a new `paypal-transmission-time` (9.9).
+4. 10.5: bring the final numbers into the external project documentation (README and `docs/demo.md` have them).
+5. The unattended runner (`demo:check`) resets a local database, so it cannot run against Render; walk
+   `docs/demo.md` by hand on the deployed dashboard instead.
+
+Offline demo on any machine: `npm run demo:reset`, `BOOMERANG_OFFLINE=true npm run dev:api`, `npm run dev:dashboard`.
