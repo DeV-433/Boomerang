@@ -144,7 +144,8 @@ function simEvents(caseId: string, outcome: string, timeline: TimelineEntry[], h
 export async function timelineRoutes(app: FastifyInstance, deps: AppDeps): Promise<void> {
   const db = deps.db.db;
 
-  async function runList(): Promise<TimelineRunInfo[]> {
+  /** The 20 newest finished runs with results, or just the run with this id (however old). */
+  async function runList(id?: string): Promise<TimelineRunInfo[]> {
     const rows = await db
       .select({
         id: simRuns.id,
@@ -154,7 +155,7 @@ export async function timelineRoutes(app: FastifyInstance, deps: AppDeps): Promi
         cases: sql<number>`(select count(*)::int from ${simCaseResults} where ${simCaseResults.runId} = ${simRuns.id})`,
       })
       .from(simRuns)
-      .where(isNotNull(simRuns.finishedAt))
+      .where(id ? and(isNotNull(simRuns.finishedAt), eq(simRuns.id, id)) : isNotNull(simRuns.finishedAt))
       .orderBy(desc(simRuns.startedAt))
       .limit(20);
     return rows.filter((r) => r.cases > 0).map((r) => ({ ...r, startedAt: iso(r.startedAt) }));
@@ -172,10 +173,11 @@ export async function timelineRoutes(app: FastifyInstance, deps: AppDeps): Promi
 
     if (q.source === "run") {
       // "latest" prefers the newest treatment run: that is the one with Boomerang's decisions in it.
+      // A run older than the 20 in the picker is still reachable by its id.
       const run =
         q.run === "latest"
           ? (runs.find((r) => r.arm === "treatment") ?? runs[0])
-          : runs.find((r) => r.id === q.run);
+          : (runs.find((r) => r.id === q.run) ?? (await runList(q.run))[0]);
       if (!run) return reply.code(404).send({ error: "no finished simulator run with results" });
       const [cfg] = await db.select({ c: simRuns.simConfig }).from(simRuns).where(eq(simRuns.id, run.id));
       const horizonDays = Number((cfg?.c as { horizonDays?: number } | undefined)?.horizonDays ?? 45);
@@ -210,7 +212,7 @@ export async function timelineRoutes(app: FastifyInstance, deps: AppDeps): Promi
       return {
         source: "run",
         run,
-        runs,
+        runs: runs.some((r) => r.id === run.id) ? runs : [...runs, run],
         rows,
         events: evts,
         total: run.cases,
