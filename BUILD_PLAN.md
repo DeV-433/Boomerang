@@ -240,7 +240,7 @@ No cut line: every phase is in scope (decided 2026-11-09, step 0.7).
 
 ## Phase 8: Extras (cut first if time is short)
 
-- [ ] **8.1 [C]** API: `GET /api/timeline`. *Done when:* returns contacts, scheduled follow-ups, promises and stop markers per case.
+- [x] **8.1 [C]** API: `GET /api/timeline`. *Done when:* returns contacts, scheduled follow-ups, promises and stop markers per case.
 - [ ] **8.2 [C]** Bryntum Scheduler: one row per case, past and future events. *Done when:* a seeded run renders readably for 30 cases.
 - [ ] **8.3 [C]** Markers for promise dates, stopping rules and recovery. *Done when:* a stopped case shows the rule name on hover.
 - [ ] **8.4 [C]** Backup simple timeline inside the audit detail row in case the scheduler trial has limits. *Done when:* the fallback renders without Bryntum.

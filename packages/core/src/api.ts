@@ -390,3 +390,63 @@ export interface TrustAttackResponse {
   result: AttackRunResult;
   ms: number;
 }
+
+// Phase 8: recovery timeline ----------------------------------------------------------------------
+
+export const TIMELINE_EVENT_KINDS = [
+  "opened",
+  "contact",
+  "followup",
+  "promise",
+  "paypal",
+  "page",
+  "recovered",
+  "stopped",
+  "escalated",
+] as const;
+export type TimelineEventKind = (typeof TIMELINE_EVENT_KINDS)[number];
+
+export interface TimelineRow {
+  caseId: string;
+  paypalRef: string;
+  lane: "invoice" | "subscription";
+  amountCents: number;
+  currency: string;
+  /** Live: the case state. Run: the simulated outcome (recovered, opted_out, disputed, unrecovered). */
+  state: string;
+}
+
+export interface TimelineEvent {
+  id: string;
+  caseId: string;
+  kind: TimelineEventKind;
+  start: string;
+  /** Null for a point in time (a marker). */
+  end: string | null;
+  label: string;
+  detail: string | null;
+  /** The gate rule behind a stop or hand-off, when one decided it. */
+  rule: { number: number; name: string } | null;
+  /** True for something still to come (a scheduled follow-up, a promise not yet due). */
+  future: boolean;
+}
+
+export interface TimelineRunInfo {
+  id: string;
+  arm: string;
+  strategy: string;
+  startedAt: string;
+  cases: number;
+}
+
+export interface TimelineResponse {
+  source: "live" | "run";
+  run: TimelineRunInfo | null;
+  /** Finished simulator runs that can be shown instead of live cases. */
+  runs: TimelineRunInfo[];
+  rows: TimelineRow[];
+  events: TimelineEvent[];
+  total: number;
+  range: { start: string; end: string };
+  now: string;
+}
