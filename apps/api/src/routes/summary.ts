@@ -62,13 +62,15 @@ async function upliftInterval(
   db: Database,
   controlRunId: string,
   treatmentRunId: string,
+  /** Seeds the resampling: the same batch and strategies give the same interval after a reset. */
+  seed: string,
 ): Promise<UpliftInterval | null> {
   const [control, treatment] = await Promise.all([
     armSample(db, controlRunId),
     armSample(db, treatmentRunId),
   ]);
   if (control.atRisk.length === 0 || treatment.atRisk.length === 0) return null;
-  const i = twoSampleBootstrap(control, treatment, { seed: `${controlRunId}|${treatmentRunId}` });
+  const i = twoSampleBootstrap(control, treatment, { seed });
   return { low: i.low * 100, high: i.high * 100, level: i.level, iterations: i.iterations };
 }
 
@@ -114,7 +116,15 @@ export async function buildSummary(
     r ? { ...runInfo(r), metrics: r.metrics as SimArmMetrics } : null;
   const simControl = withMetrics(control);
   const simTreatment = withMetrics(treatment);
-  const interval = control && treatment ? await upliftInterval(db, control.id, treatment.id) : null;
+  const interval =
+    control && treatment
+      ? await upliftInterval(
+          db,
+          control.id,
+          treatment.id,
+          `${control.seed}|${control.strategy}|${treatment.strategy}`,
+        )
+      : null;
   type Stored = { sameCases?: SummaryResponse["simulated"]["sameCases"] } | null;
   const sameCases = (treatment?.metrics as Stored)?.sameCases ?? null;
   const shown = treatment ?? control;

@@ -17,7 +17,8 @@
     "violations": "tsx scripts/violations.ts",
     "load": "tsx scripts/load.ts",
     "scan-logs": "tsx scripts/scan-logs.ts",
-    "demo-reset": "tsx scripts/demo-reset.ts"
+    "demo-reset": "tsx scripts/demo-reset.ts",
+    "demo-check": "tsx scripts/demo-check.ts"
   },
   "dependencies": {
     "seedrandom": "3.0.5",

@@ -20,6 +20,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { verifyChain } from "@boomerang/audit";
 import {
+  configurePayLinks,
   processPendingEvents,
   runCaseCheck,
   runDueJobs,
@@ -44,6 +45,9 @@ if (!["localhost", "127.0.0.1", "::1", "db"].includes(host))
 if (process.env.RENDER_DATABASE_URL && process.env.RENDER_DATABASE_URL === url)
   throw new Error("DATABASE_URL is the Render database; refusing to reset it");
 const logger = createLogger({ name: "demo-reset", level: "warn" });
+// Reminders carry the pay page, as they do from the API and worker when these are set.
+if (config.PAY_LINK_SECRET && config.PUBLIC_BASE_URL)
+  configurePayLinks({ secret: config.PAY_LINK_SECRET, baseUrl: config.PUBLIC_BASE_URL });
 const started = Date.now();
 const step = (msg: string) =>
   console.log(`  ${((Date.now() - started) / 1000).toFixed(0).padStart(3)}s  ${msg}`);

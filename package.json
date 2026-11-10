@@ -32,7 +32,8 @@
     "check:violations": "npm run violations -w @boomerang/sim --",
     "sim:load": "npm run load -w @boomerang/sim --",
     "scan:logs": "npm run scan-logs -w @boomerang/sim --",
-    "demo:reset": "npm run demo-reset -w @boomerang/sim --"
+    "demo:reset": "npm run demo-reset -w @boomerang/sim --",
+    "demo:check": "npm run demo-check -w @boomerang/sim --"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
