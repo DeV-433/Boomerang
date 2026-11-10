@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { loadEnv } from "./env";
 
+/** An empty or blank variable (as copied from .env.example) means "not set": use the default. */
+const blankAsUnset = (v: unknown) => (typeof v === "string" && v.trim() === "" ? undefined : v);
+
 const optionalString = z
   .string()
   .optional()
@@ -8,8 +11,11 @@ const optionalString = z
 
 const ConfigSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  PORT: z.coerce.number().int().positive().default(3000),
-  LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
+  PORT: z.preprocess(blankAsUnset, z.coerce.number().int().positive().default(3000)),
+  LOG_LEVEL: z.preprocess(
+    blankAsUnset,
+    z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
+  ),
   DATABASE_URL: optionalString,
   PAYPAL_CLIENT_ID: optionalString,
   PAYPAL_CLIENT_SECRET: optionalString,
@@ -24,7 +30,7 @@ const ConfigSchema = z.object({
    */
   GROQ_API_KEYS: optionalString,
   /** Requests per minute per Groq model; unset means no client-side limit (Groq's own headers still pace calls). */
-  GROQ_RPM: z.coerce.number().positive().optional(),
+  GROQ_RPM: z.preprocess(blankAsUnset, z.coerce.number().positive().optional()),
   POLICY_MODE: z.enum(["dry_run", "live"]).default("dry_run"),
   /**
    * 10.3: run with no PayPal at all (demo or a machine without PayPal credentials). The API and the
@@ -40,7 +46,7 @@ const ConfigSchema = z.object({
   /** The API's public address, used to build pay-page links (7C.6), e.g. https://boomerang-api-rgd8.onrender.com */
   PUBLIC_BASE_URL: optionalString,
   /** Shown on the pay page (7C.2). */
-  MERCHANT_NAME: z.string().trim().min(1).max(80).default("Boomerang Demo Store"),
+  MERCHANT_NAME: z.preprocess(blankAsUnset, z.string().trim().min(1).max(80).default("Boomerang Demo Store")),
   SIM_WEBHOOK_SECRET: optionalString,
   /** Browser origins allowed to call the API (the dashboard), comma-separated. Local Vite dev is always allowed outside production. */
   DASHBOARD_ORIGINS: optionalString,

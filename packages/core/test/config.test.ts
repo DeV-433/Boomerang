@@ -14,6 +14,26 @@ describe("loadConfig", () => {
     expect(config.PAYPAL_WEBHOOK_ID).toBeUndefined();
   });
 
+  it("treats blank values copied from .env.example as unset, using the defaults (10.4)", () => {
+    const config = loadConfig({ MERCHANT_NAME: "", PORT: "", GROQ_RPM: " ", LOG_LEVEL: "" });
+    expect(config.MERCHANT_NAME).toBe("Boomerang Demo Store");
+    expect(config.PORT).toBe(3000);
+    expect(config.GROQ_RPM).toBeUndefined();
+    expect(config.LOG_LEVEL).toBe("info");
+  });
+
+  it("loads the shipped .env.example as it is", async () => {
+    const { readFileSync } = await import("node:fs");
+    const text = readFileSync(new URL("../../../.env.example", import.meta.url), "utf8");
+    const env = Object.fromEntries(
+      text
+        .split("\n")
+        .filter((l) => /^[A-Z_]+=/.test(l))
+        .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]),
+    );
+    expect(() => loadConfig(env)).not.toThrow();
+  });
+
   it("rejects an unknown policy mode", () => {
     expect(() => loadConfig({ POLICY_MODE: "yolo" })).toThrow(/POLICY_MODE/);
   });
