@@ -56,15 +56,34 @@ export function setupGrid(): void {
   if (key) LicenseManager.setLicenseKey(key);
 }
 
-const light = themeQuartz
-  .withPart(colorSchemeLight)
-  .withParams({ fontFamily: "inherit", fontSize: 13, headerFontWeight: 600, accentColor: "#2f5bd3" });
-const dark = themeQuartz.withPart(colorSchemeDark).withParams({
+// Matches the dashboard theme in styles.css: white surface, light rules, orange accent, rounded wrapper.
+const shared = {
   fontFamily: "inherit",
   fontSize: 13,
-  headerFontWeight: 600,
-  accentColor: "#7c9cf0",
-  backgroundColor: "#1d1d1b",
+  headerFontSize: 11,
+  headerFontWeight: 500,
+  wrapperBorderRadius: 20,
+  wrapperBorder: false,
+  columnBorder: false,
+  rowVerticalPaddingScale: 1.3,
+} as const;
+const light = themeQuartz.withPart(colorSchemeLight).withParams({
+  ...shared,
+  accentColor: "#f0601e",
+  backgroundColor: "#ffffff",
+  foregroundColor: "#171717",
+  headerBackgroundColor: "#ffffff",
+  headerTextColor: "#8a8a86",
+  borderColor: "#ececea",
+  oddRowBackgroundColor: "#ffffff",
+});
+const dark = themeQuartz.withPart(colorSchemeDark).withParams({
+  ...shared,
+  accentColor: "#ff7a3d",
+  backgroundColor: "#1e1e1c",
+  headerBackgroundColor: "#1e1e1c",
+  headerTextColor: "#9b9b95",
+  borderColor: "#2f2f2c",
 });
 
 /** The grid theme follows the operating system's light or dark setting, live. */

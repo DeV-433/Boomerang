@@ -41,7 +41,7 @@ function HealthBadge() {
       data-testid="health"
     >
       <span className="dot" aria-hidden="true" />
-      {label}
+      <span className="badge-label">{label}</span>
     </span>
   );
 }
@@ -51,21 +51,30 @@ export function App() {
   return (
     <div className="shell">
       <header className="topbar">
-        <span className="brand">Boomerang</span>
-        <nav className="nav">
+        <span className="brand">
+          <span className="brand-mark" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M5 19c3-1 6-4 7.5-8.5L14 5l5 2-3.5 3.5C13 14 9 17.5 5 19Z" fill="currentColor" />
+            </svg>
+          </span>
+          Boomerang
+        </span>
+        <nav className="nav" aria-label="Pages">
           {NAV.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.to === "/"}>
               {n.label}
             </NavLink>
           ))}
         </nav>
-        <HealthBadge />
-        {token && <PauseButton />}
-        {token && (
-          <button className="link-button" onClick={() => setToken(null)}>
-            Sign out
-          </button>
-        )}
+        <div className="top-actions">
+          <HealthBadge />
+          {token && <PauseButton />}
+          {token && (
+            <button className="link-button" onClick={() => setToken(null)}>
+              Sign out
+            </button>
+          )}
+        </div>
       </header>
       {token && <PausedBanner />}
       <main className="content">
