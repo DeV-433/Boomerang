@@ -54,4 +54,4 @@ npm run ci             # lint, type-check, migrate, test
 npm run dev:api
 ```
 
-Full instructions coming soon.
+Moving to another machine: see `HANDOFF.md` (setup, secrets list, guardrails, where the build stands). Full instructions coming soon.
