@@ -349,6 +349,21 @@ async function onCustomerReply(ctx: Ctx): Promise<string | null> {
   return open.id;
 }
 
+/**
+ * 8.5: the customer says they updated their payment method (the pay page's "try again" button).
+ * Records it on the subscription case and checks the case now, which proposes a retry of the balance.
+ */
+async function onPaymentUpdated(ctx: Ctx): Promise<string | null> {
+  const r = resourceOf<{ paypal_ref?: string; lane?: string; source?: string }>(ctx.event);
+  if (!r.paypal_ref || r.lane !== "subscription") return null;
+  const open = await openCaseFor(ctx.tx, "subscription", r.paypal_ref);
+  if (!open) return null;
+  await ctx.tx.update(cases).set({ paymentUpdatedAt: ctx.now }).where(eq(cases.id, open.id));
+  await observed(ctx, open.id, { paymentMethodUpdated: true, source: r.source ?? null });
+  await scheduleCheck(ctx.tx, open.id, ctx.now, "customer updated their payment method");
+  return open.id;
+}
+
 const HANDLERS: Record<string, (ctx: Ctx) => Promise<string | null>> = {
   "BILLING.SUBSCRIPTION.PAYMENT.FAILED": onSubscriptionPaymentFailed,
   "BILLING.SUBSCRIPTION.SUSPENDED": onSubscriptionSuspended,
@@ -361,6 +376,7 @@ const HANDLERS: Record<string, (ctx: Ctx) => Promise<string | null>> = {
   "BOOMERANG.INVOICE.STATUS_CHANGED": onInvoiceStatus,
   "BOOMERANG.INVOICE.OVERDUE": onInvoiceOverdue,
   "BOOMERANG.CUSTOMER.REPLY": onCustomerReply,
+  "BOOMERANG.CUSTOMER.PAYMENT_UPDATED": onPaymentUpdated,
   "CUSTOMER.DISPUTE.CREATED": onDispute,
   "CUSTOMER.DISPUTE.UPDATED": onDispute,
 };

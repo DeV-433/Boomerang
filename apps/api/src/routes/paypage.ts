@@ -9,6 +9,8 @@ import type { AppDeps } from "../app";
 /** The event a pay-page promise becomes: the same as a classified customer reply, minus any text. */
 export const PAY_PAGE_SOURCE = "paypage";
 const REPLY_EVENT = "BOOMERANG.CUSTOMER.REPLY";
+/** 8.5: the customer says they fixed their payment method and wants the payment tried again. */
+export const PAYMENT_UPDATED_EVENT = "BOOMERANG.CUSTOMER.PAYMENT_UPDATED";
 
 const esc = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -123,7 +125,14 @@ export async function payPageRoutes(
     const promise = activePromise
       ? `<p>You told us you will pay by <strong>${esc(longDate(activePromise))}</strong>. We will not remind you before then.</p>`
       : `<form method="post" action="/pay/${esc(token)}/promise"><h1>Need a little time?</h1><p class="muted small">Pick the day you will pay, up to ${PAY_PAGE_PROMISE_MAX_DAYS} days from today. We will hold reminders until then.</p><label for="date">I will pay by</label><input id="date" name="date" type="date" min="${today}" max="${max}" required><p></p><button class="button secondary" type="submit">Promise this date</button></form>`;
-    return `${notice}${header}<div class="card"><a class="button" href="${esc(paypalPayLink(c))}" rel="noopener noreferrer">${payLabel}</a><p class="muted small">You will pay on PayPal's own page. ${c.lane === "invoice" ? "Card or PayPal balance." : ""}</p></div><div class="card">${promise}</div>`;
+    // 8.5: after fixing the card on PayPal, the subscriber can ask for the payment to be tried again.
+    const retry =
+      c.lane !== "subscription"
+        ? ""
+        : c.paymentUpdatedAt
+          ? `<p class="ok small"><strong>Thanks. We will try the payment again shortly.</strong></p>`
+          : `<form method="post" action="/pay/${esc(token)}/updated"><p class="muted small">Already updated it?</p><button class="button secondary" type="submit">I have updated it: try the payment again</button></form>`;
+    return `${notice}${header}<div class="card"><a class="button" href="${esc(paypalPayLink(c))}" rel="noopener noreferrer">${payLabel}</a><p class="muted small">You will pay on PayPal's own page. ${c.lane === "invoice" ? "Card or PayPal balance." : ""}</p>${retry}</div><div class="card">${promise}</div>`;
   };
 
   app.get<{ Params: { token: string } }>(
@@ -137,6 +146,65 @@ export async function payPageRoutes(
         200,
         `Pay ${formatMoney(r.c.amountCents, r.c.currency)} · ${merchant}`,
         view(r.c, req.params.token),
+      );
+    },
+  );
+
+  app.post<{ Params: { token: string }; Body: Record<string, unknown> }>(
+    "/pay/:token/updated",
+    { config: { rateLimit: { max: 5, timeWindow: "1 hour" } } },
+    async (req, reply) => {
+      const r = await open(req.params.token, reply);
+      if ("error" in r) return r.error;
+      const c = r.c;
+      const title = `Payment method updated · ${merchant}`;
+      const back = (msg: string, status: number) =>
+        page(
+          reply,
+          status,
+          title,
+          view(c, req.params.token, `<div class="card"><p class="bad">${esc(msg)}</p></div>`),
+        );
+      // Nothing can be submitted here but the click itself.
+      const body = req.body && typeof req.body === "object" ? req.body : {};
+      if (Object.keys(body).length) return back("Nothing needs to be filled in here.", 400);
+      if (c.lane !== "subscription") return back("This is only for subscription payments.", 400);
+      if (isEndState(c.state)) return back("This balance can no longer be changed here.", 409);
+      const [waiting] = await deps.db.db
+        .select({ id: events.id })
+        .from(events)
+        .where(
+          and(
+            eq(events.type, PAYMENT_UPDATED_EVENT),
+            eq(events.resourceId, c.paypalRef),
+            isNull(events.processedAt),
+          ),
+        )
+        .limit(1);
+      if (!c.paymentUpdatedAt && !waiting) {
+        const id = `PAYPAGE-UPDATED-${c.id}-${Date.now()}`;
+        const payload = {
+          id,
+          event_type: PAYMENT_UPDATED_EVENT,
+          resource: { paypal_ref: c.paypalRef, lane: c.lane, source: PAY_PAGE_SOURCE },
+        };
+        await deps.db.db.insert(events).values({
+          paypalEventId: id,
+          type: PAYMENT_UPDATED_EVENT,
+          resourceId: c.paypalRef,
+          payload,
+          rawBody: JSON.stringify(payload),
+          headers: {},
+          source: PAY_PAGE_SOURCE,
+          simulated: false,
+        });
+        req.log.info({ caseId: c.id }, "pay page: payment method updated");
+      }
+      return page(
+        reply,
+        200,
+        title,
+        `<div class="card"><p class="ok"><strong>Thank you. We will try the payment again shortly.</strong></p><p class="muted">You do not need to do anything else. If it still does not go through, we will let you know.</p></div>`,
       );
     },
   );

@@ -20,6 +20,8 @@ export interface CaseSnapshot {
   /** Subscriptions. */
   failedPayments: number;
   lastFailureReason: string | null;
+  /** Subscriptions (8.5): the customer says they fixed their payment method and wants a retry. */
+  paymentUpdatedAt?: Date | null;
   /** yyyy-MM-dd the customer promised to pay by. */
   promiseDate: string | null;
   disputed: boolean;
@@ -92,6 +94,9 @@ export function diagnose(s: CaseSnapshot, now: Date): Diagnosis {
         ? d("cancelled_with_balance", `subscription ${status} with balance owing`)
         : d("resolved", `subscription ${status}, nothing owed`);
     }
+    // 8.5: the customer fixed their payment method, so retrying the balance now can work.
+    if (s.paymentUpdatedAt && s.amountCents > 0)
+      return d("payment_method_updated", "customer updated their payment method and asked for a retry");
     if (status === "SUSPENDED" || s.failedPayments >= FAILURE_THRESHOLD)
       return d("threshold_reached", `suspended or ${s.failedPayments} failed payments`);
     if (reason && HARD_FAILURE_REASONS.includes(reason))

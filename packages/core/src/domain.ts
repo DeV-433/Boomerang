@@ -77,6 +77,7 @@ export const CAUSES = {
     "expired_funding_source",
     "threshold_reached",
     "cancelled_with_balance",
+    "payment_method_updated",
   ],
   invoice: ["overdue_no_engagement", "overdue_unresponsive", "promise_to_pay", "broken_promise"],
   any: ["dispute", "opted_out", "resolved"],

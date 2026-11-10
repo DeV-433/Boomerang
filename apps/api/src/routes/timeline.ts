@@ -365,7 +365,11 @@ export async function timelineRoutes(app: FastifyInstance, deps: AppDeps): Promi
           kind: page ? "page" : "paypal",
           start: iso(e.receivedAt),
           end: null,
-          label: page ? "Promise from the pay page" : e.type,
+          label: page
+            ? e.type === "BOOMERANG.CUSTOMER.PAYMENT_UPDATED"
+              ? "Payment method updated (pay page)"
+              : "Promise from the pay page"
+            : e.type,
           detail: page ? null : `via ${e.source}`,
           rule: null,
           future: false,

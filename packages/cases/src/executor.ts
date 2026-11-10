@@ -170,6 +170,10 @@ export async function executeAction(deps: LoopDeps, actionId: string, policy: Po
   const key = idempotencyKey(caseId, action, stage);
   const nextCheckHours = action === "request_balance_capture" ? 24 : 72;
 
+  // 8.5: a customer's "I updated my payment method" buys one retry; it is used up by this attempt.
+  if (action === "request_balance_capture")
+    await deps.db.update(cases).set({ paymentUpdatedAt: null }).where(eq(cases.id, caseId));
+
   // Dry run: the agent only suggests. Record what would have been called and move on.
   if (policy.mode === "dry_run" || !deps.gateway) {
     const wouldCall = describeCall(action, current.paypalRef, message, current.amountCents, current.currency);

@@ -1,0 +1,1 @@
+ALTER TABLE "cases" ADD COLUMN "payment_updated_at" timestamp with time zone;

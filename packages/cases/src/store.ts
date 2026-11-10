@@ -71,6 +71,7 @@ export async function loadSnapshot(db: Db, caseId: string, now: Date): Promise<C
     dueDate: c.dueDate,
     failedPayments: c.failedPayments,
     lastFailureReason: c.lastFailureReason,
+    paymentUpdatedAt: c.paymentUpdatedAt,
     promiseDate: c.promiseDate,
     disputed: c.disputed,
     optedOut: customer.optedOut,

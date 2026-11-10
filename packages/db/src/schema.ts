@@ -123,6 +123,8 @@ export const cases = pgTable(
     /** Subscriptions: failed payments PayPal has reported in this cycle. */
     failedPayments: integer("failed_payments").notNull().default(0),
     lastFailureReason: text("last_failure_reason"),
+    /** Subscriptions (8.5): when the customer said they updated their payment method; cleared once a retry is attempted. */
+    paymentUpdatedAt: timestamp("payment_updated_at", { withTimezone: true }),
     /** Why the case reached its end state (gate rule, event, operator). */
     closeReason: text("close_reason"),
     openedAt: timestamp("opened_at", { withTimezone: true }).notNull().defaultNow(),

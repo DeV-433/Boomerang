@@ -58,6 +58,13 @@ export function proposeByRules(s: CaseSnapshot, diagnosis: Diagnosis, now: Date)
             H.followUp,
           )
         : p("escalate_to_human", "subscription suspended at the failure threshold", 0),
+    // 8.5: the manual retry. Capturing the balance moves money, so gate rule 12 holds it for a person (8.6).
+    payment_method_updated: () =>
+      p(
+        "request_balance_capture",
+        "the customer updated their payment method: retry the outstanding balance now",
+        H.followUp,
+      ),
     cancelled_with_balance: () =>
       p(
         "escalate_to_human",

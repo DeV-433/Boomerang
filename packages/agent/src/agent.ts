@@ -241,11 +241,12 @@ async function withDraft(
 /**
  * Step 5.10: the agent as the loop's proposer, with the rule-based proposer as fallback when the
  * model cannot be reached (network, quota). Clear-cut cases skip the model entirely, because rules
- * are enough there (design principle 2): resolved, disputed, opted-out and exhausted cases.
+ * are enough there (design principle 2): resolved, disputed, opted-out and exhausted cases, and a
+ * retry the customer asked for after updating their payment method (8.5).
  */
 export function agentProposer(opts: AgentOptions): Proposer {
   return async (s: CaseSnapshot, diagnosis: Diagnosis, now: Date) => {
-    if (["resolved", "dispute", "opted_out"].includes(diagnosis.cause))
+    if (["resolved", "dispute", "opted_out", "payment_method_updated"].includes(diagnosis.cause))
       return proposeByRules(s, diagnosis, now);
     try {
       return await decide(opts, s, diagnosis, now);

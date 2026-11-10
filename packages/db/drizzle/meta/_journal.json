@@ -50,6 +50,13 @@
       "when": 1794255194609,
       "tag": "0006_scenarios",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794298968223,
+      "tag": "0007_payment_updated",
+      "breakpoints": true
     }
   ]
 }
