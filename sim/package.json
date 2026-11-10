@@ -16,7 +16,8 @@
     "sensitivity": "tsx scripts/sensitivity.ts",
     "violations": "tsx scripts/violations.ts",
     "load": "tsx scripts/load.ts",
-    "scan-logs": "tsx scripts/scan-logs.ts"
+    "scan-logs": "tsx scripts/scan-logs.ts",
+    "demo-reset": "tsx scripts/demo-reset.ts"
   },
   "dependencies": {
     "seedrandom": "3.0.5",

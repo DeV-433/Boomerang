@@ -8,6 +8,9 @@ export interface Assignable {
   amountCents: number;
 }
 
+/** The key a case is assigned under: its position in the batch, so ties break the same way every time. */
+export const armKey = (batchIndex: number) => String(batchIndex).padStart(7, "0");
+
 /** Amount bands used for stratification, in dollars: [0,100), [100,500), [500,2000), [2000,∞). */
 export const AMOUNT_BANDS = [100, 500, 2000];
 

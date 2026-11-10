@@ -3,7 +3,7 @@ import { processPendingEvents } from "@boomerang/cases";
 import type { Logger } from "@boomerang/core";
 import { batches, cases, customers, simProfiles, type Database } from "@boomerang/db";
 import type { PayPalGateway } from "@boomerang/paypal";
-import { assignArms } from "./assign";
+import { armKey, assignArms } from "./assign";
 import type { SimConfig } from "./config";
 import { planBatch, type PlannedCase } from "./generate";
 import { injectSubscriptionFailure, type EventPoster } from "./inject";
@@ -211,11 +211,23 @@ export async function seedBatch(o: SeedOptions): Promise<SeedSummary> {
   }
 
   // Step 3.5: stratified assignment over the whole batch.
+  // Cases are keyed by their position in the batch, not their random database id, so equal
+  // amounts (common for subscriptions) break ties the same way every time: same seed, same split.
   const batchCases = await db
-    .select({ id: cases.id, lane: cases.lane, amountCents: cases.amountCents })
+    .select({
+      id: cases.id,
+      lane: cases.lane,
+      amountCents: cases.amountCents,
+      batchIndex: simProfiles.batchIndex,
+    })
     .from(cases)
+    .innerJoin(simProfiles, eq(simProfiles.caseId, cases.id))
     .where(eq(cases.batchId, batchId));
-  const arms = assignArms(batchCases, o.seed);
+  const byKey = assignArms(
+    batchCases.map((c) => ({ id: armKey(c.batchIndex), lane: c.lane, amountCents: c.amountCents })),
+    o.seed,
+  );
+  const arms = new Map(batchCases.map((c) => [c.id, byKey.get(armKey(c.batchIndex))!]));
   for (const arm of ["control", "treatment"] as const) {
     const ids = batchCases.filter((c) => arms.get(c.id) === arm).map((c) => c.id);
     if (ids.length)

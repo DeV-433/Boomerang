@@ -1,5 +1,5 @@
 import { proposeByRules, type Proposer } from "@boomerang/cases";
-import { assignArms } from "./assign";
+import { armKey, assignArms } from "./assign";
 import { baselineStrategy } from "./baseline";
 import { withOverrides, type SimConfig } from "./config";
 import { simulateArm, type CaseResult, type SimCase } from "./engine";
@@ -175,13 +175,14 @@ export function plannedArms(config: SimConfig, seed: string, size: number) {
     profile: p.profile,
     visible: { reasonCode: p.subscription?.reasonCode ?? null, timezone: p.customer.timezone },
   }));
+  // Keyed by batch position, exactly as the seeder does, so the split matches a seeded batch.
   const arms = assignArms(
-    all.map((c) => ({ id: c.caseId, lane: c.lane, amountCents: c.amountCents })),
+    all.map((c) => ({ id: armKey(c.profile.batchIndex), lane: c.lane, amountCents: c.amountCents })),
     seed,
   );
   return {
-    control: all.filter((c) => arms.get(c.caseId) === "control"),
-    treatment: all.filter((c) => arms.get(c.caseId) === "treatment"),
+    control: all.filter((c) => arms.get(armKey(c.profile.batchIndex)) === "control"),
+    treatment: all.filter((c) => arms.get(armKey(c.profile.batchIndex)) === "treatment"),
   };
 }
 

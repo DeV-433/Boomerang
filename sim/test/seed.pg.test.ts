@@ -12,6 +12,7 @@ import type { EventPoster } from "../src/inject";
 import { computeMetrics } from "../src/metrics";
 import { Rng } from "../src/rng";
 import { seedBatch } from "../src/seed";
+import { plannedArms } from "../src/sensitivity";
 import { findBatch, loadSimCases, saveRun } from "../src/store";
 
 const SECRET = "seed-test-secret";
@@ -69,6 +70,22 @@ describe.skipIf(!hasTestDb)("seeding a batch end to end (3.3 to 3.5, 3.7)", () =
         type: "BILLING.SUBSCRIPTION.PAYMENT.FAILED",
       });
     }
+  });
+
+  it("splits the arms by seed alone: the same split as planning the batch in memory (10.1)", async () => {
+    const summary = await seedIt();
+    const rows = await h.db
+      .select({ arm: cases.experimentGroup, batchIndex: simProfiles.batchIndex })
+      .from(cases)
+      .innerJoin(simProfiles, eq(simProfiles.caseId, cases.id))
+      .where(eq(cases.batchId, summary.batchId));
+    const planned = plannedArms(config, seed, 60);
+    const plannedArm = new Map([
+      ...planned.control.map((c) => [c.profile.batchIndex, "control"] as const),
+      ...planned.treatment.map((c) => [c.profile.batchIndex, "treatment"] as const),
+    ]);
+    expect(rows).toHaveLength(60);
+    for (const r of rows) expect(r.arm).toBe(plannedArm.get(r.batchIndex));
   });
 
   it("is idempotent: seeding the same seed again adds nothing", async () => {

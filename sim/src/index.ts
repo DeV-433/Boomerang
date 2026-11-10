@@ -10,7 +10,7 @@ export {
 export { Rng } from "./rng";
 export { planBatch, type BatchPlan, type PlannedCase } from "./generate";
 export { respond, responseProbabilities, type Response } from "./responder";
-export { assignArms, amountBand, AMOUNT_BANDS, type Arm } from "./assign";
+export { assignArms, armKey, amountBand, AMOUNT_BANDS, type Arm } from "./assign";
 export {
   simulateCase,
   simulateArm,
