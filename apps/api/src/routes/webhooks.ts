@@ -1,3 +1,4 @@
+import rateLimit from "@fastify/rate-limit";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { SIM_SIGNATURE_HEADER, verifySimulatedEvent } from "@boomerang/core";
 import { events } from "@boomerang/db";
@@ -34,6 +35,35 @@ export function resourceIdOf(envelope: PayPalEventEnvelope): string | null {
   return str(envelope.resource?.id) ?? str(envelope.resource?.invoice?.id);
 }
 
+/** 9.6: how old a PayPal transmission may be, and how far ahead of our clock (skew). */
+export const REPLAY_WINDOW_MS = 15 * 60_000;
+export const FUTURE_SKEW_MS = 5 * 60_000;
+/** 9.6: deliveries per client address per minute on each webhook route. Generous: seeding a batch makes PayPal send bursts, and a 429 only delays them (PayPal redelivers for three days). */
+export const WEBHOOK_RATE_LIMIT_PER_MINUTE = 600;
+/** PayPal events are a few kilobytes; anything far larger is not one. */
+export const WEBHOOK_BODY_LIMIT_BYTES = 256 * 1024;
+
+/**
+ * 9.6: rejects a replayed delivery. PayPal signs the transmission time together with the body
+ * (transmission_id|transmission_time|webhook_id|crc32), so it cannot be changed without failing
+ * verification; each redelivery is a new transmission with a new time. Checked before the
+ * verification call, so a flood of stale replays never reaches PayPal.
+ */
+export function checkTransmissionTime(
+  header: string | string[] | undefined,
+  now: Date,
+): { ok: true } | { ok: false; reason: string } {
+  const value = Array.isArray(header) ? header[0] : header;
+  if (!value) return { ok: false, reason: "missing paypal-transmission-time" };
+  const sent = Date.parse(value);
+  if (Number.isNaN(sent)) return { ok: false, reason: "unreadable paypal-transmission-time" };
+  const age = now.getTime() - sent;
+  if (age > REPLAY_WINDOW_MS)
+    return { ok: false, reason: `transmission is ${Math.round(age / 60_000)} minutes old` };
+  if (age < -FUTURE_SKEW_MS) return { ok: false, reason: "transmission time is in the future" };
+  return { ok: true };
+}
+
 /**
  * POST /webhooks/paypal
  *
@@ -43,9 +73,23 @@ export function resourceIdOf(envelope: PayPalEventEnvelope): string | null {
 export async function webhookRoutes(app: FastifyInstance, deps: AppDeps): Promise<void> {
   // Keep the body as the exact string PayPal sent; signature verification depends on the raw bytes.
   app.removeContentTypeParser("application/json");
-  app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body, done) => done(null, body));
+  app.addContentTypeParser(
+    "application/json",
+    { parseAs: "string", bodyLimit: WEBHOOK_BODY_LIMIT_BYTES },
+    (_req, body, done) => done(null, body),
+  );
+  // 9.6: per-address rate limit (Render's proxy sets the client address; trustProxy is on).
+  await app.register(rateLimit, { global: false });
+  const limited = {
+    config: {
+      rateLimit: {
+        max: deps.webhookRateLimitPerMinute ?? WEBHOOK_RATE_LIMIT_PER_MINUTE,
+        timeWindow: "1 minute",
+      },
+    },
+  };
 
-  app.post("/webhooks/paypal", async (req, reply) => {
+  app.post("/webhooks/paypal", limited, async (req, reply) => {
     const rawBody = typeof req.body === "string" ? req.body : "";
     let envelope: PayPalEventEnvelope;
     try {
@@ -56,6 +100,18 @@ export async function webhookRoutes(app: FastifyInstance, deps: AppDeps): Promis
     const eventId = str(envelope?.id);
     const eventType = str(envelope?.event_type);
     if (!eventId || !eventType) return reply.code(400).send({ error: "missing_event_id_or_type" });
+
+    const fresh = checkTransmissionTime(
+      req.headers["paypal-transmission-time"],
+      (deps.now ?? (() => new Date()))(),
+    );
+    if (!fresh.ok) {
+      req.log.warn(
+        { eventId, eventType, reason: fresh.reason },
+        "webhook rejected: outside the replay window",
+      );
+      return reply.code(400).send({ error: "stale_or_missing_transmission_time" });
+    }
 
     let result;
     try {
@@ -94,7 +150,7 @@ export async function webhookRoutes(app: FastifyInstance, deps: AppDeps): Promis
   // Exists only in the sandbox with SIM_WEBHOOK_SECRET set; signed with our own HMAC, stored as simulated.
   if (deps.simulation) {
     const { secret } = deps.simulation;
-    app.post("/webhooks/simulated", async (req, reply) => {
+    app.post("/webhooks/simulated", limited, async (req, reply) => {
       const rawBody = typeof req.body === "string" ? req.body : "";
       const header = req.headers[SIM_SIGNATURE_HEADER];
       const check = verifySimulatedEvent(secret, rawBody, Array.isArray(header) ? header[0] : header);

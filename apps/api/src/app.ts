@@ -29,6 +29,8 @@ export interface AppDeps {
   merchantName?: string;
   /** Clock for decisions (tests pin it; production uses the real time). */
   now?: () => Date;
+  /** 9.6: webhook deliveries allowed per client address per minute (default 600). */
+  webhookRateLimitPerMinute?: number;
   /** POLICY_MODE, reported to the dashboard. */
   policyMode?: "dry_run" | "live";
 }

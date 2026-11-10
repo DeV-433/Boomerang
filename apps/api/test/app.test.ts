@@ -6,6 +6,7 @@ import { events, type DbHandle } from "@boomerang/db";
 import { hasTestDb, setupTestDb } from "@boomerang/db/testing";
 import type { WebhookVerifier } from "@boomerang/paypal";
 import { buildApp } from "../src/app";
+import { checkTransmissionTime, REPLAY_WINDOW_MS } from "../src/routes/webhooks";
 
 const TAMPER_MARKER = "TAMPERED";
 
@@ -23,7 +24,10 @@ const signed = {
   "paypal-cert-url": "https://api.sandbox.paypal.com/v1/notifications/certs/CERT",
   "paypal-transmission-id": "tx",
   "paypal-transmission-sig": "sig",
-  "paypal-transmission-time": "2026-11-09T10:00:00Z",
+  // Fresh on every delivery, as PayPal's are (9.6 rejects stale transmissions).
+  get "paypal-transmission-time"() {
+    return new Date().toISOString();
+  },
 };
 
 function sampleEvent(id = `WH-${randomUUID()}`): string {
@@ -137,5 +141,94 @@ describe.skipIf(!hasTestDb)("api", () => {
     expect([first.statusCode, second.statusCode]).toEqual([200, 200]);
     expect([first.json().duplicate, second.json().duplicate].sort()).toEqual([false, true]);
     expect(await h.db.select().from(events).where(eq(events.paypalEventId, id))).toHaveLength(1);
+  });
+});
+
+describe.skipIf(!hasTestDb)("webhook hardening (9.6)", () => {
+  let h: DbHandle;
+  let app: FastifyInstance;
+  let calls = 0;
+  const counting: WebhookVerifier = {
+    async verify(headers, rawBody) {
+      calls++;
+      return fakeVerifier.verify(headers, rawBody);
+    },
+  };
+  beforeAll(async () => {
+    h = await setupTestDb();
+    app = await buildApp({ db: h, verifier: counting, webhookRateLimitPerMinute: 5 });
+  });
+  afterAll(async () => {
+    await app?.close();
+    await h?.close();
+  });
+  const deliver = (headers: Record<string, string>, payload = sampleEvent(), ip = "203.0.113.7") =>
+    app.inject({ method: "POST", url: "/webhooks/paypal", headers, payload, remoteAddress: ip });
+
+  it("signature: an unsigned or tampered delivery is rejected and nothing is stored", async () => {
+    const id = `WH-${randomUUID()}`;
+    const { "paypal-transmission-sig": _sig, ...unsigned } = { ...signed };
+    expect(
+      (
+        await deliver(
+          { ...unsigned, "paypal-transmission-time": new Date().toISOString() },
+          sampleEvent(id),
+          "198.51.100.1",
+        )
+      ).statusCode,
+    ).toBe(400);
+    expect(
+      (await deliver({ ...signed }, sampleEvent(id).replace("INV2-AAAA", TAMPER_MARKER), "198.51.100.1"))
+        .statusCode,
+    ).toBe(400);
+    expect(await h.db.select().from(events).where(eq(events.paypalEventId, id))).toHaveLength(0);
+  });
+
+  it("replay window: a stale or future transmission is rejected before PayPal is asked", async () => {
+    const before = calls;
+    const id = `WH-${randomUUID()}`;
+    const old = new Date(Date.now() - REPLAY_WINDOW_MS - 60_000).toISOString();
+    const ahead = new Date(Date.now() + 10 * 60_000).toISOString();
+    const r1 = await deliver({ ...signed, "paypal-transmission-time": old }, sampleEvent(id), "198.51.100.2");
+    const r2 = await deliver(
+      { ...signed, "paypal-transmission-time": ahead },
+      sampleEvent(id),
+      "198.51.100.2",
+    );
+    const r3 = await deliver(
+      { ...signed, "paypal-transmission-time": "not a date" },
+      sampleEvent(id),
+      "198.51.100.2",
+    );
+    expect([r1.statusCode, r2.statusCode, r3.statusCode]).toEqual([400, 400, 400]);
+    expect(r1.json()).toEqual({ error: "stale_or_missing_transmission_time" });
+    expect(calls).toBe(before); // never reached the verification call
+    expect(await h.db.select().from(events).where(eq(events.paypalEventId, id))).toHaveLength(0);
+    // A fresh delivery of the same event is accepted.
+    expect((await deliver({ ...signed }, sampleEvent(id), "198.51.100.2")).statusCode).toBe(200);
+  });
+
+  it("checks the window at its edges", () => {
+    const now = new Date("2026-11-11T12:00:00Z");
+    const at = (ms: number) => new Date(now.getTime() + ms).toISOString();
+    expect(checkTransmissionTime(at(-REPLAY_WINDOW_MS + 1000), now).ok).toBe(true);
+    expect(checkTransmissionTime(at(-REPLAY_WINDOW_MS - 1000), now).ok).toBe(false);
+    expect(checkTransmissionTime(at(4 * 60_000), now).ok).toBe(true);
+    expect(checkTransmissionTime(at(6 * 60_000), now).ok).toBe(false);
+    expect(checkTransmissionTime(undefined, now).ok).toBe(false);
+  });
+
+  it("rate limit: one address gets 429 after its allowance, another is unaffected", async () => {
+    const codes: number[] = [];
+    for (let i = 0; i < 7; i++)
+      codes.push((await deliver({ ...signed }, sampleEvent(), "192.0.2.50")).statusCode);
+    expect(codes.slice(0, 5)).toEqual([200, 200, 200, 200, 200]);
+    expect(codes.slice(5)).toEqual([429, 429]);
+    expect((await deliver({ ...signed }, sampleEvent(), "192.0.2.51")).statusCode).toBe(200);
+  });
+
+  it("rejects an oversized body", async () => {
+    const big = `{"id":"WH-${randomUUID()}","event_type":"X","pad":"${"x".repeat(300 * 1024)}"}`;
+    expect((await deliver({ ...signed }, big, "198.51.100.3")).statusCode).toBe(413);
   });
 });
