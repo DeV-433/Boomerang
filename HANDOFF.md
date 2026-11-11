@@ -15,7 +15,7 @@ of this plan" table: those decisions override the plan's original wording and th
 PayPal webhooks (signature-verified, stored once) open recovery cases for unpaid invoices and failed subscription
 payments. Each case gets a diagnosed cause from a fixed table, then a proposed next action: from an LLM agent
 (Groq `openai/gpt-oss-120b`, fallback `gpt-oss-20b`, then plain rules) choosing only from a per-lane action menu with a
-validated JSON schema. A deterministic 12-rule policy gate allows, blocks or holds every proposal (rule 12 holds
+validated JSON schema. A deterministic 13-rule policy gate allows, blocks or holds every proposal (rule 12 holds
 money-moving actions for human approval). The executor calls PayPal with idempotency keys; every step is written to a
 hash-chained audit log. Around it: a seeded simulator with hidden customer types and a control arm, a what-if replay
 with bootstrap intervals, a trust panel (chain verify, prompt-injection suite), a signed customer pay page, and an

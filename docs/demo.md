@@ -1,5 +1,11 @@
 # Boomerang demo script
 
+> **The one-line pitch:** "Boomerang is an AI agent that wins back PayPal revenue at risk. The model proposes, 13 rules
+> it cannot bend decide, and every step is provable."
+>
+> **The three things judges should remember:** half the messages for about the same money; zero contacts after an
+> opt-out; a hash-chained audit log that catches any edit.
+
 About four minutes: six beats, then three standout moments. Every beat is also checked automatically by
 `npm run demo:check`, and there is a recorded fallback video, [`demo/boomerang-demo.mp4`](demo/boomerang-demo.mp4).
 
@@ -31,7 +37,7 @@ Checklist: signed in with `OPERATOR_TOKEN`; Summary loads; the browser zoom at 1
 | --- | --- | --- | --- | --- |
 | 1 | 0:00 | **Summary** | Point at the chips (batch, dry run) and the recovered total. | "A merchant's backlog: 300 overdue invoices and failed subscriptions, $120K at risk. Half is worked by a fixed schedule like PayPal's own reminders, half by Boomerang." |
 | 2 | 0:30 | **Cases** | Type `DEMO` in search, then clear it. Drag *Cause* to the group bar. | "Every case gets a diagnosed cause from a fixed table and one proposed next action, from the agent or the rules, chosen only from that lane's menu." |
-| 3 | 1:00 | **Approvals** | The $4,500 Northwind Studio case is selected. Read *Why the gate held it*. Click **Approve and send**. | "A deterministic 12-rule gate allows, blocks or holds every proposal. This one is over the approval limit, rule 9. A person approves; it is sent once, with an idempotency key, and logged." |
+| 3 | 1:00 | **Approvals** | The $4,500 Northwind Studio case is selected. Read *Why the gate held it*. Click **Approve and send**. | "A deterministic 13-rule gate allows, blocks or holds every proposal. This one is over the approval limit, rule 9. A person approves; it is sent once, with an idempotency key, and logged." |
 | 4 | 1:30 | **Audit** | Search `0120`. Expand the *gated* row. | "This customer replied STOP. The gate's rule 3 stopped every contact from that moment. The fixed schedule kept emailing opted-out customers: 88 times in the control arm. Boomerang: zero." |
 | 5 | 2:00 | **Summary** | The uplift card and its interval plot; scroll to *Uplift across seeds and settings*. | "Against the control arm: +7.0 points, but the 95% interval runs from −13.9 to +27.0, and on the very same cases the fixed schedule would have done 4.2 points better. Across 5 seeds and 12 simulator settings the uplift ranges from about −10 to +19 points with a median near +1. We show the range, not a lucky number: Boomerang recovers about the same money with roughly half the messages, and never contacts anyone after an opt-out." |
 | 6 | 2:30 | **Trust** | Click **Verify**. | "Every step is in a hash-chained audit log: 758 entries, every link checked." |
