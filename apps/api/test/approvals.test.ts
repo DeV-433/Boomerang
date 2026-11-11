@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import type { ApprovalsResponse } from "@boomerang/core";
-import { processPendingEvents, runCaseCheck } from "@boomerang/cases";
+import { processPendingEvents, reportWorkerMode, runCaseCheck } from "@boomerang/cases";
 import { actions, approvals, events, type DbHandle } from "@boomerang/db";
 import { hasTestDb, setupTestDb } from "@boomerang/db/testing";
 import type { WebhookVerifier } from "@boomerang/paypal";
@@ -59,6 +59,8 @@ describe.skipIf(!hasTestDb)("dashboard API: approvals (6.9)", () => {
 
   beforeAll(async () => {
     h = await setupTestDb();
+    // B15: the API sends live only when the worker reports live as well.
+    await reportWorkerMode(h.db, "live");
     app = await buildApp({
       db: h,
       verifier,
@@ -131,6 +133,31 @@ describe.skipIf(!hasTestDb)("dashboard API: approvals (6.9)", () => {
     expect(ap).toMatchObject({ status: "edited", note: "warmer opening" });
     const [sent] = await h.db.select().from(actions).where(eq(actions.id, action.id));
     expect((sent!.message as { body: string }).body).toBe(body);
+  });
+
+  it("B13: an edited subject must pass the checks too", async () => {
+    const { c, action, approval } = await heldCase();
+    const body = (action.message as { body: string }).body;
+    const bad = await decide(approval.id, {
+      decision: "edit",
+      message: { subject: "Last chance before legal action", body },
+    });
+    expect(bad.statusCode).toBe(422);
+    expect(bad.json().issues.join(" ")).toMatch(/subject/);
+    expect((await caseByRef(h.db, c.paypalRef)).state).toBe("approval");
+  });
+
+  it("B15: with the worker in dry run, an approval in a live API records a dry run and sends nothing", async () => {
+    await reportWorkerMode(h.db, "dry_run");
+    try {
+      const { approval } = await heldCase();
+      const before = tool(fake, "send_invoice_reminder").length;
+      const res = await decide(approval.id, { decision: "approve" });
+      expect(res.json()).toMatchObject({ outcome: "dry_run" });
+      expect(tool(fake, "send_invoice_reminder")).toHaveLength(before);
+    } finally {
+      await reportWorkerMode(h.db, "live");
+    }
   });
 
   it("reject stops the case and sends nothing", async () => {

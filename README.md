@@ -18,11 +18,15 @@ A 73-second walkthrough of the demo: [`docs/demo/boomerang-demo.mp4`](docs/demo/
 3. **Propose.** An LLM agent (Groq `openai/gpt-oss-120b`, falling back to `gpt-oss-20b`, then to plain rules) picks one
    action from that lane's menu, as JSON validated against a schema. It sees structured case facts only: no names,
    emails, PayPal ids or customer text.
-4. **Gate.** A deterministic 12-rule policy gate allows, blocks or holds every proposal: already resolved, dispute open,
-   opted out, global pause, action whitelist, contact caps, 48-hour spacing, contact hours in the customer's time zone,
-   approval above $2,000, confidence floor, message lint, and a person's approval for anything that moves money.
+4. **Gate.** A deterministic 13-rule policy gate allows, blocks or holds every proposal: already resolved, dispute open,
+   opted out, global pause, action whitelist, no contact before a date the customer promised, contact caps, 48-hour
+   spacing, contact hours in the customer's time zone, approval above $2,000, confidence floor, message lint (body and
+   subject), and a person's approval for anything that moves money. An approved action that cannot go out yet (outside
+   contact hours) keeps its approval and goes out at the next check.
 5. **Execute.** Allowed actions go to PayPal through one gateway, with idempotency keys and a fresh re-check of the
-   invoice first. Dry-run mode records what would be sent.
+   invoice first. Dry-run mode records what would be sent, and counts it as a contact so the stages, spacing and caps
+   run as they would live. Approved actions sent from the dashboard go live only when the API **and** the worker are
+   both in `live` mode (the worker reports its mode; the dashboard shows the mode in force).
 6. **Prove.** Every step is written to an append-only, hash-chained audit log. A simulator with hidden customer types
    measures recovered dollars against a fixed-schedule control arm.
 
@@ -131,7 +135,12 @@ tier, so `GROQ_API_KEYS` can list extra keys from other organisations; answers a
 static dashboard, in Singapore. Create it from the Render dashboard, then fill in the variables marked `sync: false`
 (PayPal, Groq, `OPERATOR_TOKEN`, `PAY_LINK_SECRET`, `PUBLIC_BASE_URL`, `DASHBOARD_ORIGINS`, the dashboard's
 `VITE_*`). Render deploys every push to `main`; there is no hosted CI on this account, so the pre-push hook is the gate.
-Keep the worker in `dry_run` unless you mean to send reminders, and never set `GROQ_API_KEYS` there.
+Keep the worker in `dry_run` unless you mean to send reminders, and never set `GROQ_API_KEYS` there. (An API set to
+`live` still sends nothing while the worker is in `dry_run`.)
+
+Customer replies: PayPal reminder emails are answered to the merchant's inbox, not to Boomerang. Customers opt out with
+the "Stop reminders about this" button on their pay page, and the operator records any other reply with **Log reply**
+on the cases page (`POST /api/cases/:id/reply`, with a label or left to the classifier).
 
 ## Layout
 
@@ -153,7 +162,8 @@ Keep the worker in `dry_run` unless you mean to send reminders, and never set `G
 
 - Simulated customers: every response probability is an assumption, not a measured PayPal figure; results only mean
   something next to their settings and across the sensitivity range.
-- Partial payments are not modelled: a case recovers all of its amount or nothing.
+- The simulator does not model partial payments (a simulated case recovers all of its amount or nothing). The live loop
+  counts a partial payment as recovered money and asks only for what is still due.
 - Subscription failures are injected (`I-SIM…`): the sandbox cannot fail a payment on demand or create an outstanding
   balance. Invoice cases in sandbox mode are real PayPal invoices.
 - "Invoice viewed but unpaid" is not observable through PayPal's API, so that cause is not used.

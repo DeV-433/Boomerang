@@ -233,7 +233,7 @@ export function Approvals() {
   const [view, setView] = useState<View>("pending");
   const [selected, setSelected] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
-  const status = view === "pending" ? "pending" : "approved,edited,rejected";
+  const status = view === "pending" ? "pending" : "approved,edited,rejected,cancelled";
   const list = useQuery({
     queryKey: ["approvals", status],
     queryFn: ({ signal }) => api<ApprovalsResponse>(`/api/approvals?status=${status}`, { signal }),

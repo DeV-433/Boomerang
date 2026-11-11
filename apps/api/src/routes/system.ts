@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { SystemStatus } from "@boomerang/core";
-import { setSystemPaused } from "@boomerang/cases";
+import { effectiveMode, setSystemPaused } from "@boomerang/cases";
 import { systemState } from "@boomerang/db";
 import type { AppDeps } from "../app";
 import { OPERATOR_ACTOR } from "./cases";
@@ -14,11 +14,15 @@ export async function systemRoutes(app: FastifyInstance, deps: AppDeps): Promise
   const db = deps.db.db;
   const status = async (): Promise<SystemStatus> => {
     const [row] = await db.select().from(systemState).where(eq(systemState.id, 1));
+    const m = await effectiveMode(db, deps.policyMode ?? "dry_run");
     return {
       paused: row?.paused ?? false,
       pausedBy: row?.pausedBy ?? null,
       changedAt: row?.changedAt.toISOString() ?? null,
-      mode: deps.policyMode ?? "dry_run",
+      mode: m.mode,
+      apiMode: m.apiMode,
+      workerMode: m.workerMode,
+      workerSeenAt: m.workerSeenAt?.toISOString() ?? null,
     };
   };
 

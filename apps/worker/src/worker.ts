@@ -1,8 +1,10 @@
 import { agentProposer, classifyPendingReplies, GroqClient, RecordingClient } from "@boomerang/agent";
 import {
   configurePayLinks,
+  configurePayPalWeb,
   pollInvoices,
   processPendingEvents,
+  reportWorkerMode,
   runDueJobs,
   type LoopDeps,
 } from "@boomerang/cases";
@@ -33,6 +35,7 @@ const payLinks =
     ? { secret: config.PAY_LINK_SECRET, baseUrl: publicBaseUrl(config)! }
     : null;
 configurePayLinks(payLinks);
+configurePayPalWeb(config.PAYPAL_ENVIRONMENT);
 logger.info({ payLinksInMessages: Boolean(payLinks) }, "pay links");
 
 const TICK_MS = Number(process.env.WORKER_TICK_MS ?? 5_000);
@@ -60,27 +63,37 @@ let stopping = false;
 let busy = false;
 let lastPoll = 0;
 
+/** B4: each stage fails on its own; one failing (the model, PayPal) never stops the others. */
+async function stage<T>(name: string, fallback: T, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    logger.error({ err, stage: name }, `worker ${name} failed`);
+    return fallback;
+  }
+}
+
 async function tick(): Promise<void> {
   if (busy || stopping) return; // never overlap ticks
   busy = true;
   try {
     await pingDb(db.pool);
-    if (model) await classifyPendingReplies(db.db, model, { logger });
-    const processed = await processPendingEvents(db.db, { logger });
+    // B15: tell the API which mode this worker runs in (approved actions go live only if both are live).
+    await stage("mode report", undefined, () => reportWorkerMode(db.db, deps.mode ?? "dry_run"));
+    if (model) await stage("reply classification", 0, () => classifyPendingReplies(db.db, model, { logger }));
+    const processed = await stage("event processing", 0, () => processPendingEvents(db.db, { logger }));
     if (paypal && Date.now() - lastPoll >= POLL_MS) {
       lastPoll = Date.now();
-      try {
-        await pollInvoices({
+      await stage("invoice poll", undefined, () =>
+        pollInvoices({
           db: db.db,
           gateway: paypal.gateway,
           merchantTimezone: DEFAULT_POLICY.hours.merchantTimezone,
           logger,
-        });
-      } catch (err) {
-        logger.error({ err }, "invoice poll failed");
-      }
+        }).then(() => undefined),
+      );
     }
-    const results = await runDueJobs(deps);
+    const results = await stage("due checks", [], () => runDueJobs(deps));
     if (processed > 0 || results.length > 0) {
       logger.info(
         {
@@ -104,6 +117,10 @@ async function shutdown(signal: string): Promise<void> {
   stopping = true;
   logger.info({ signal }, "worker shutting down");
   clearInterval(timer);
+  // B5: let a running tick finish (Render allows 30 s after SIGTERM), so its claimed checks complete.
+  const deadline = Date.now() + 25_000;
+  while (busy && Date.now() < deadline) await new Promise((r) => setTimeout(r, 200));
+  if (busy) logger.warn("tick still running at shutdown; its checks will be taken back after the lease");
   await db.close();
   process.exit(0);
 }

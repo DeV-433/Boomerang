@@ -2,7 +2,7 @@ import { createLogger, loadConfig, publicBaseUrl, requireConfig } from "@boomera
 import { createDb } from "@boomerang/db";
 import { assertToolkitReady, createPayPal, OFFLINE_VERIFIER } from "@boomerang/paypal";
 import { GroqClient, RecordingClient } from "@boomerang/agent";
-import { configurePayLinks } from "@boomerang/cases";
+import { configurePayLinks, configurePayPalWeb } from "@boomerang/cases";
 import { buildApp, corsOriginsFrom } from "./app";
 
 const config = loadConfig();
@@ -41,6 +41,7 @@ const payLinks =
     ? { secret: config.PAY_LINK_SECRET, baseUrl: publicBaseUrl(config)! }
     : null;
 configurePayLinks(payLinks);
+configurePayPalWeb(config.PAYPAL_ENVIRONMENT);
 logger.info({ payPage: Boolean(config.PAY_LINK_SECRET), payLinksInMessages: Boolean(payLinks) }, "pay page");
 const corsOrigins = corsOriginsFrom(config);
 logger.info({ corsOrigins }, "dashboard origins");

@@ -9,6 +9,7 @@ import type {
   SummaryResponse,
   UpliftInterval,
 } from "@boomerang/core";
+import { effectiveMode } from "@boomerang/cases";
 import { batches, cases, simCaseResults, simRuns, systemState, type Database } from "@boomerang/db";
 import { twoSampleBootstrap, type ArmSample } from "@boomerang/sim";
 import type { AppDeps } from "../app";
@@ -180,7 +181,8 @@ export async function summaryRoutes(app: FastifyInstance, deps: AppDeps): Promis
     const summary = await buildSummary(deps.db.db, {
       batch,
       treatmentRun,
-      mode: deps.policyMode ?? "dry_run",
+      // B15: the mode actions actually run in (live only when the API and the worker are both live).
+      mode: (await effectiveMode(deps.db.db, deps.policyMode ?? "dry_run")).mode,
     });
     if (batch && batch !== "latest" && !summary.batch)
       return reply.code(404).send({ error: "batch not found" });

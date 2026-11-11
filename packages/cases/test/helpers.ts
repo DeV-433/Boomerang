@@ -20,6 +20,8 @@ export interface FakePayPal {
   invoices: Record<string, unknown>[];
   /** get_invoice fails with this HTTP status for these invoice ids (outage or deleted invoice). */
   failGetInvoice: Map<string, number>;
+  /** The next call of each listed tool fails once with this HTTP status (then succeeds again). */
+  failNext: Map<string, number>;
 }
 
 /**
@@ -31,9 +33,15 @@ export function fakePayPal(): FakePayPal {
   const invoiceStatus = new Map<string, string>();
   const invoices: Record<string, unknown>[] = [];
   const failGetInvoice = new Map<string, number>();
+  const failNext = new Map<string, number>();
   const runTool: ToolRunner = async (tool, args, options) => {
     const a = args as Record<string, unknown>;
     calls.push({ tool, args: a, requestId: options.requestId });
+    const once = failNext.get(tool);
+    if (once) {
+      failNext.delete(tool);
+      throw new PayPalHttpError(once, `{"name":"FAKE_${once}"}`, "fake-debug", tool);
+    }
     const failWith = tool === "get_invoice" ? failGetInvoice.get(String(a.invoice_id)) : undefined;
     if (failWith)
       throw new PayPalHttpError(failWith, `{"name":"FAKE_${failWith}"}`, "fake-debug", "get_invoice");
@@ -63,7 +71,7 @@ export function fakePayPal(): FakePayPal {
     fetchFn,
     retry: { sleep: async () => {} },
   });
-  return { gateway, calls, invoiceStatus, invoices, failGetInvoice };
+  return { gateway, calls, invoiceStatus, invoices, failGetInvoice, failNext };
 }
 
 export const tool = (fake: FakePayPal, name: string) => fake.calls.filter((c) => c.tool === name);

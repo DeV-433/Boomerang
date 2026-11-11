@@ -17,7 +17,8 @@ import {
   type OperatorResult,
 } from "@boomerang/cases";
 import { isEndState } from "@boomerang/core";
-import { caseStateEnum, cases, customers, laneEnum } from "@boomerang/db";
+import { REPLY_LABELS } from "@boomerang/agent";
+import { caseStateEnum, cases, customers, events, laneEnum } from "@boomerang/db";
 import type { AppDeps } from "../app";
 
 const list = <T extends string>(values: readonly [T, ...T[]]) =>
@@ -125,6 +126,25 @@ function badRequest(error: z.ZodError) {
 const IdParams = z.object({ id: z.string().uuid() });
 const PauseBody = z.object({ paused: z.boolean(), note: z.string().trim().max(500).optional() });
 const EscalateBody = z.object({ note: z.string().trim().max(500).optional() });
+
+/**
+ * B6: a customer reply the operator received outside Boomerang (for example an answer to a PayPal
+ * reminder email, which goes to the merchant's inbox). With a label it is recorded as given; without
+ * one the worker's no-tools classifier labels it. Either way the text is stored as customer-written.
+ */
+const ReplyBody = z
+  .object({
+    text: z.string().trim().min(1).max(4000),
+    label: z.enum(REPLY_LABELS).optional(),
+    promiseDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "promiseDate must be yyyy-MM-dd")
+      .optional(),
+  })
+  .strict()
+  .refine((b) => b.promiseDate === undefined || b.label === "promise", {
+    message: "promiseDate goes with the label promise",
+  });
 /** One operator in this system (section 3 of the project documentation). */
 export const OPERATOR_ACTOR = "operator";
 
@@ -238,6 +258,43 @@ export async function caseRoutes(app: FastifyInstance, deps: AppDeps): Promise<v
         .code(409)
         .send({ error: "pay-page links are not configured (PAY_LINK_SECRET and PUBLIC_BASE_URL)" });
     return { link };
+  });
+
+  app.post("/cases/:id/reply", async (req, reply) => {
+    const params = IdParams.safeParse(req.params);
+    const body = ReplyBody.safeParse(req.body ?? {});
+    if (!params.success) return reply.code(400).send(badRequest(params.error));
+    if (!body.success) return reply.code(400).send(badRequest(body.error));
+    const [c] = await db.select().from(cases).where(eq(cases.id, params.data.id));
+    if (!c) return reply.code(404).send({ error: "case not found" });
+    if (isEndState(c.state)) return reply.code(409).send({ error: `case is ${c.state}` });
+    const { text, label, promiseDate } = body.data;
+    const id = `OPERATOR-REPLY-${c.id}-${Date.now()}`;
+    const payload = {
+      id,
+      event_type: "BOOMERANG.CUSTOMER.REPLY",
+      resource: {
+        paypal_ref: c.paypalRef,
+        lane: c.lane,
+        text,
+        // Unlabelled: the worker's classifier labels it before the case sees it.
+        classification: label ?? null,
+        promise_date: label === "promise" ? (promiseDate ?? null) : null,
+        source: "operator",
+      },
+    };
+    await db.insert(events).values({
+      paypalEventId: id,
+      type: "BOOMERANG.CUSTOMER.REPLY",
+      resourceId: c.paypalRef,
+      caseId: c.id,
+      payload,
+      rawBody: JSON.stringify(payload),
+      headers: {},
+      source: "operator",
+    });
+    req.log.info({ caseId: c.id, label: label ?? null }, "operator logged a customer reply");
+    return { caseId: c.id, eventId: id, label: label ?? null, classifiedBy: label ? "operator" : "model" };
   });
 
   app.post("/cases/:id/escalate", async (req, reply) => {

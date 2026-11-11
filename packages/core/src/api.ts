@@ -227,7 +227,7 @@ export interface DraftMessage {
 export interface ApprovalRow {
   approvalId: string;
   actionId: string;
-  status: "pending" | "approved" | "edited" | "rejected";
+  status: "pending" | "approved" | "edited" | "rejected" | "cancelled";
   createdAt: string;
   decidedAt: string | null;
   decidedBy: string | null;
@@ -277,7 +277,13 @@ export interface SystemStatus {
   paused: boolean;
   pausedBy: string | null;
   changedAt: string | null;
+  /** The mode approved actions actually run in: live only when the API and the worker are both live. */
   mode: "dry_run" | "live";
+  /** The API's own POLICY_MODE. */
+  apiMode: "dry_run" | "live";
+  /** The worker's POLICY_MODE as it last reported it; null if no worker has reported yet. */
+  workerMode: "dry_run" | "live" | null;
+  workerSeenAt: string | null;
 }
 
 // 7A: what-if ----------------------------------------------------------------------------------------

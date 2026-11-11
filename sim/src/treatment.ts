@@ -143,6 +143,7 @@ export function loopStrategy(options: {
         contactsOnCase: view.contactsSoFar,
         customerContactsLast7Days: snapshot.customerContactsLast7Days,
         lastContactAt: snapshot.lastContactAt,
+        promiseDate: snapshot.promiseDate,
         proposal,
         messageLint: proposal.message
           ? lintMessage(proposal.message.body, messageFacts(snapshot))

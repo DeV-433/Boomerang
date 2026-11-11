@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import type { SystemStatus } from "@boomerang/core";
-import { processPendingEvents, runCaseCheck } from "@boomerang/cases";
+import { processPendingEvents, reportWorkerMode, runCaseCheck } from "@boomerang/cases";
 import { auditLog, jobs, type DbHandle } from "@boomerang/db";
 import { hasTestDb, setupTestDb } from "@boomerang/db/testing";
 import type { WebhookVerifier } from "@boomerang/paypal";
@@ -31,6 +31,8 @@ describe.skipIf(!hasTestDb)("dashboard API: global pause (6.11)", () => {
 
   beforeAll(async () => {
     h = await setupTestDb();
+    // B15: the API sends live only when the worker reports live as well.
+    await reportWorkerMode(h.db, "live");
     app = await buildApp({ db: h, verifier, operatorToken: TOKEN, policyMode: "live" });
   });
   afterAll(async () => {
@@ -50,7 +52,13 @@ describe.skipIf(!hasTestDb)("dashboard API: global pause (6.11)", () => {
     try {
       const paused = await setPaused(true);
       expect(paused.statusCode).toBe(200);
-      expect(paused.json<SystemStatus>()).toMatchObject({ paused: true, pausedBy: "operator", mode: "live" });
+      expect(paused.json<SystemStatus>()).toMatchObject({
+        paused: true,
+        pausedBy: "operator",
+        mode: "live",
+        apiMode: "live",
+        workerMode: "live",
+      });
       const [entry] = await h.db
         .select()
         .from(auditLog)

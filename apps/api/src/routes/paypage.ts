@@ -1,9 +1,9 @@
 import rateLimit from "@fastify/rate-limit";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { formatMoney, isEndState, PAY_PAGE_PROMISE_MAX_DAYS, verifyPayLink } from "@boomerang/core";
 import { paypalPayLink } from "@boomerang/cases";
-import { cases, events } from "@boomerang/db";
+import { cases, customers, events } from "@boomerang/db";
 import type { AppDeps } from "../app";
 
 /** The event a pay-page promise becomes: the same as a classified customer reply, minus any text. */
@@ -132,7 +132,9 @@ export async function payPageRoutes(
         : c.paymentUpdatedAt
           ? `<p class="ok small"><strong>Thanks. We will try the payment again shortly.</strong></p>`
           : `<form method="post" action="/pay/${esc(token)}/updated"><p class="muted small">Already updated it?</p><button class="button secondary" type="submit">I have updated it: try the payment again</button></form>`;
-    return `${notice}${header}<div class="card"><a class="button" href="${esc(paypalPayLink(c))}" rel="noopener noreferrer">${payLabel}</a><p class="muted small">You will pay on PayPal's own page. ${c.lane === "invoice" ? "Card or PayPal balance." : ""}</p>${retry}</div><div class="card">${promise}</div>`;
+    // B6: the opt-out every message promises ("Reply STOP"), as a button that needs no reply channel.
+    const stop = `<form method="post" action="/pay/${esc(token)}/stop"><p class="muted small">Prefer not to hear from us about this?</p><button class="button secondary" type="submit">Stop reminders about this</button></form>`;
+    return `${notice}${header}<div class="card"><a class="button" href="${esc(paypalPayLink(c))}" rel="noopener noreferrer">${payLabel}</a><p class="muted small">You will pay on PayPal's own page. ${c.lane === "invoice" ? "Card or PayPal balance." : ""}</p>${retry}</div><div class="card">${promise}</div><div class="card">${stop}</div>`;
   };
 
   app.get<{ Params: { token: string } }>(
@@ -210,6 +212,78 @@ export async function payPageRoutes(
   );
 
   app.post<{ Params: { token: string }; Body: Record<string, unknown> }>(
+    "/pay/:token/stop",
+    { config: { rateLimit: { max: 5, timeWindow: "1 hour" } } },
+    async (req, reply) => {
+      const r = await open(req.params.token, reply);
+      if ("error" in r) return r.error;
+      const c = r.c;
+      const title = `Reminders stopped · ${merchant}`;
+      const body = req.body && typeof req.body === "object" ? req.body : {};
+      if (Object.keys(body).length)
+        return page(
+          reply,
+          400,
+          title,
+          view(
+            c,
+            req.params.token,
+            `<div class="card"><p class="bad">Nothing needs to be filled in here.</p></div>`,
+          ),
+        );
+      const done = page(
+        reply,
+        200,
+        title,
+        `<div class="card"><p class="ok"><strong>Done. We will not send you any more reminders about this.</strong></p><p class="muted">The balance is still open; you can pay any time:</p><a class="button" href="${esc(paypalPayLink(c))}" rel="noopener noreferrer">${c.lane === "invoice" ? "Pay now with PayPal" : "Update your payment method in PayPal"}</a></div>`,
+      );
+      if (isEndState(c.state)) return done;
+      const [customer] = await deps.db.db
+        .select({ optedOut: customers.optedOut })
+        .from(customers)
+        .where(eq(customers.id, c.customerId));
+      const [waiting] = await deps.db.db
+        .select({ id: events.id })
+        .from(events)
+        .where(
+          and(
+            eq(events.type, REPLY_EVENT),
+            eq(events.source, PAY_PAGE_SOURCE),
+            eq(events.resourceId, c.paypalRef),
+            isNull(events.processedAt),
+            sql`${events.payload}->'resource'->>'classification' = 'opt_out'`,
+          ),
+        )
+        .limit(1);
+      if (!customer?.optedOut && !waiting) {
+        const id = `PAYPAGE-OPTOUT-${c.id}-${Date.now()}`;
+        const payload = {
+          id,
+          event_type: REPLY_EVENT,
+          resource: {
+            paypal_ref: c.paypalRef,
+            lane: c.lane,
+            classification: "opt_out",
+            source: PAY_PAGE_SOURCE,
+          },
+        };
+        await deps.db.db.insert(events).values({
+          paypalEventId: id,
+          type: REPLY_EVENT,
+          resourceId: c.paypalRef,
+          payload,
+          rawBody: JSON.stringify(payload),
+          headers: {},
+          source: PAY_PAGE_SOURCE,
+          simulated: false,
+        });
+        req.log.info({ caseId: c.id }, "pay page opt-out recorded");
+      }
+      return done;
+    },
+  );
+
+  app.post<{ Params: { token: string }; Body: Record<string, unknown> }>(
     "/pay/:token/promise",
     { config: { rateLimit: { max: 5, timeWindow: "1 hour" } } },
     async (req, reply) => {
@@ -248,6 +322,7 @@ export async function payPageRoutes(
             eq(events.source, PAY_PAGE_SOURCE),
             eq(events.resourceId, c.paypalRef),
             isNull(events.processedAt),
+            sql`${events.payload}->'resource'->>'classification' = 'promise'`,
           ),
         )
         .limit(1);

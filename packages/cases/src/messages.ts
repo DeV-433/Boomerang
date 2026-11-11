@@ -14,6 +14,12 @@ import type { CaseSnapshot } from "./diagnose";
 export { OPT_OUT_LINE, type TemplateId };
 
 let payLinks: { secret: string; baseUrl: string } | null = null;
+let paypalWeb = "https://www.sandbox.paypal.com";
+
+/** B14: PayPal's customer-facing pages follow PAYPAL_ENVIRONMENT (the API and the worker call this at startup). */
+export function configurePayPalWeb(environment: "SANDBOX" | "PRODUCTION"): void {
+  paypalWeb = environment === "PRODUCTION" ? "https://www.paypal.com" : "https://www.sandbox.paypal.com";
+}
 
 /**
  * Step 7C.6: turn on signed pay-page links in messages (the API and the worker call this at startup
@@ -25,9 +31,7 @@ export function configurePayLinks(config: { secret: string; baseUrl: string } | 
 
 /** PayPal's own page for this case: the invoice payer page, or the subscriber's automatic-payments page. */
 export function paypalPayLink(s: Pick<CaseSnapshot, "lane" | "paypalRef">): string {
-  return s.lane === "invoice"
-    ? `https://www.sandbox.paypal.com/invoice/p/#${s.paypalRef}`
-    : `https://www.sandbox.paypal.com/myaccount/autopay/`;
+  return s.lane === "invoice" ? `${paypalWeb}/invoice/p/#${s.paypalRef}` : `${paypalWeb}/myaccount/autopay/`;
 }
 
 /**

@@ -382,15 +382,17 @@ describe.skipIf(!hasTestDb)("the core loop without AI (Phase 4)", () => {
       tool: "send_invoice_reminder",
       invoiceId: c.paypalRef,
     });
-    expect((await caseByRef(h.db, c.paypalRef)).contacts).toBe(0);
+    // B9: a dry-run contact counts like a live one, so the stages, spacing and caps run as they would live.
+    expect(await caseByRef(h.db, c.paypalRef)).toMatchObject({ contacts: 1, stage: 1 });
 
-    // 9.8: the next dry run on the same stage records again instead of failing on the key.
+    // 9.8: the next dry run records again instead of failing on the key; it is the next stage now.
     const later = hoursLater(TUESDAY_10AM_NY, 72);
     const again = await runCaseCheck({ ...live(fake, later), mode: "dry_run" }, c.id);
     expect(again).toMatchObject({ outcome: "dry_run" });
     const recorded = await h.db.select().from(actions).where(eq(actions.caseId, c.id));
     expect(recorded.filter((a) => a.status === "executed")).toHaveLength(2);
     expect(recorded.every((a) => a.idempotencyKey === null)).toBe(true);
+    expect(await caseByRef(h.db, c.paypalRef)).toMatchObject({ contacts: 2, stage: 2 });
   });
 
   it("never works control-arm cases or cases of a batch that has not started", async () => {

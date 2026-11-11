@@ -71,6 +71,8 @@ export interface GateInput {
   contactsOnCase: number;
   customerContactsLast7Days: number;
   lastContactAt: Date | null;
+  /** yyyy-MM-dd the customer promised to pay by, if they did (rule 13). */
+  promiseDate?: string | null;
   proposal: Pick<Proposal, "action" | "confidence" | "message">;
   /** Result of the message lint (5.8). Absent when the action carries no message. */
   messageLint?: { ok: boolean; issues: string[] };
@@ -256,6 +258,24 @@ export const RULES: readonly Rule[] = [
     },
   },
   {
+    // B8: a promise the customer made (by reply or on the pay page) holds every message until the
+    // day after the promised date, in both lanes, whoever proposed the contact. Checked before the
+    // caps and holds below, so a pending promise defers contact instead of escalating or queueing it.
+    rule: 13,
+    name: "promise_pending",
+    check: (i) => {
+      if (!contact(i) || !i.promiseDate || !/^\d{4}-\d{2}-\d{2}$/.test(i.promiseDate)) return null;
+      if (i.promiseDate < i.now.toISOString().slice(0, 10)) return null;
+      // The day after the promise, midday UTC: the same moment the rules' promise check uses.
+      const at = new Date(new Date(`${i.promiseDate}T00:00:00Z`).getTime() + 36 * HOUR);
+      return {
+        verdict: "block",
+        effect: { kind: "retry_at", at },
+        reason: `the customer promised to pay by ${i.promiseDate}; no contact before then`,
+      };
+    },
+  },
+  {
     rule: 6,
     name: "attempt_cap",
     check: (i) => {
@@ -363,7 +383,7 @@ function isWaitOnly(i: GateInput): boolean {
   return !contact(i) && !isSensitiveAction(i.proposal.action as Action);
 }
 
-/** Evaluates every rule and lets the first failing one decide. */
+/** Evaluates every rule, in list order, and lets the first failing one decide. */
 export function evaluateGate(input: GateInput): GateDecision {
   const checks: RuleResult[] = [];
   let decision: { rule: Rule; outcome: RuleOutcome } | null = null;

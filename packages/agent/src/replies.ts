@@ -2,7 +2,7 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import type { Logger } from "@boomerang/core";
 import { events, type Database } from "@boomerang/db";
 import { classifyReply } from "./agent";
-import type { ModelClient } from "./model";
+import { ModelCallError, type ModelClient } from "./model";
 
 export const REPLY_EVENT = "BOOMERANG.CUSTOMER.REPLY";
 
@@ -44,7 +44,19 @@ export async function classifyPendingReplies(
     const payload = event.payload as { resource?: ReplyResource };
     const resource = payload.resource ?? {};
     const now = options.now?.() ?? new Date();
-    const c = await classifyReply(client, resource.text ?? "", now, { caseId: event.caseId });
+    let c: Awaited<ReturnType<typeof classifyReply>>;
+    try {
+      c = await classifyReply(client, resource.text ?? "", now, { caseId: event.caseId });
+    } catch (error) {
+      // B4: the model is unreachable or out of quota. The reply stays unlabelled for the next tick;
+      // nothing else in the worker waits on it.
+      if (!(error instanceof ModelCallError)) throw error;
+      options.logger?.warn(
+        { eventId: event.paypalEventId, err: error.message },
+        "reply classification unavailable; will retry",
+      );
+      break;
+    }
     const updated = {
       ...payload,
       resource: { ...resource, classification: c.label, promise_date: c.promiseDate },

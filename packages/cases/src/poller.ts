@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Logger } from "@boomerang/core";
 import { cases, events, type Database } from "@boomerang/db";
 import { listAllInvoices, type PayPalGateway, type PayPalInvoice } from "@boomerang/paypal";
@@ -68,6 +68,21 @@ export async function pollInvoices(deps: {
       )
     : new Set<string>();
   const changed = settled.filter((i) => openRefs.has(i.id));
+
+  // B7: fill in the merchant's invoice number on open cases opened before it was recorded (or by
+  // the seeder), so a dispute that names it finds the case. One statement, nothing if all are set.
+  const numbered = invoices.filter((i) => i.detail?.invoice_number);
+  if (numbered.length) {
+    const pairs = sql.join(
+      numbered.map((i) => sql`(${i.id}, ${i.detail.invoice_number!})`),
+      sql`, `,
+    );
+    await deps.db.execute(sql`
+      update cases set invoice_number = v.num
+      from (values ${pairs}) as v(ref, num)
+      where cases.lane = 'invoice' and cases.paypal_ref = v.ref
+        and cases.closed_at is null and cases.invoice_number is null`);
+  }
 
   const toEvent = (invoice: PayPalInvoice, type: string, id: string) => {
     const payload = {

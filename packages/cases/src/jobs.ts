@@ -8,6 +8,9 @@ type ClaimedJob = Record<string, unknown> & {
   reason: string | null;
 };
 
+/** B5: a job "running" longer than this belonged to a worker that stopped (crash or deploy restart). */
+export const JOB_LEASE_MS = 10 * 60_000;
+
 /**
  * Step 4.14: runs every due check, oldest first. Claims are atomic (FOR UPDATE SKIP LOCKED), so
  * several workers can run this safely. Only checks the loop is allowed to act on are claimed:
@@ -24,8 +27,28 @@ export async function runDueJobs(
         sql`, `,
       )})`
     : sql``;
+  // B5: take back checks a stopped worker left "running" (claimed_at is null for rows claimed before
+  // the column existed), so their cases are not stranded. Up to 5 attempts, as for a failed check.
+  const jobCases = options.caseIds?.length
+    ? sql`and jobs.case_id in (${sql.join(
+        options.caseIds.map((id) => sql`${id}::uuid`),
+        sql`, `,
+      )})`
+    : sql``;
+  const reclaimed = await deps.db.execute(sql`
+    update jobs
+    set status = case when jobs.attempts >= 5 then 'failed'::job_status else 'pending'::job_status end,
+        last_error = 'the worker stopped while running this check'
+    where jobs.status = 'running'
+      and (jobs.claimed_at is null
+           or jobs.claimed_at < ${new Date(now.getTime() - JOB_LEASE_MS).toISOString()}::timestamptz)
+      ${jobCases}`);
+  if (reclaimed.rowCount)
+    deps.logger?.warn({ jobs: reclaimed.rowCount }, "took back checks left running by a stopped worker");
+
   const claimed = await deps.db.execute<ClaimedJob>(sql`
-    update jobs set status = 'running', attempts = jobs.attempts + 1
+    update jobs set status = 'running', attempts = jobs.attempts + 1,
+      claimed_at = ${now.toISOString()}::timestamptz
     where jobs.id in (
       select j.id from jobs j
       join cases c on c.id = j.case_id

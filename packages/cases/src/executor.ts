@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { auditedTransaction, writeAudit } from "@boomerang/audit";
 import { canTransition, isContactAction, isEndState, type Action, type Proposal } from "@boomerang/core";
 import { actions, cases } from "@boomerang/db";
@@ -21,6 +21,29 @@ const FAILURE_RETRY_MS = H;
 /** Stable per case, action and stage: a retry of the same step can never send twice. */
 export function idempotencyKey(caseId: string, action: string, stage: number): string {
   return `${caseId}:${action}:${stage}`;
+}
+
+/**
+ * B1: a balance capture is not a contact, so the stage does not move between two captures on one
+ * case. Each capture after a completed one gets its own key (":retry<n>"), or a second capture (the
+ * retry a customer asks for after updating their card, 8.5) would only replay the first one's
+ * ledger entry and never reach PayPal. The first capture keeps the original key format.
+ */
+async function captureKey(db: LoopDeps["db"], caseId: string, actionId: string, stage: number) {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(actions)
+    .where(
+      and(
+        eq(actions.caseId, caseId),
+        eq(actions.action, "request_balance_capture"),
+        eq(actions.status, "executed"),
+        ne(actions.id, actionId),
+      ),
+    );
+  const n = row?.n ?? 0;
+  const base = idempotencyKey(caseId, "request_balance_capture", stage);
+  return n === 0 ? base : `${base}:retry${n}`;
 }
 
 /**
@@ -111,19 +134,33 @@ export async function executeAction(deps: LoopDeps, actionId: string, policy: Po
   if (!row) throw new Error(`action ${actionId} not found`);
   const caseId = row.caseId;
 
-  // 4.13, part 1: the case as it stands now.
-  const [current] = await deps.db.select().from(cases).where(eq(cases.id, caseId));
-  if (!current || isEndState(current.state) || row.status !== "approved") {
-    await deps.db.update(actions).set({ status: "cancelled" }).where(eq(actions.id, actionId));
-    await writeAudit(deps.db, {
+  // 4.13, part 1: the case and the action as they stand now, read under the case lock. B11: an
+  // action another run already executed is left as it is; only a still-approved one is cancelled.
+  const early = await auditedTransaction(deps.db, async (tx): Promise<CheckResult | null> => {
+    const c = await lockCase(tx, caseId);
+    const [a] = await tx.select().from(actions).where(eq(actions.id, actionId)).for("update");
+    if (a?.status === "executed")
+      return { caseId, outcome: "skipped", detail: "already executed by another run" };
+    if (c && !isEndState(c.state) && a?.status === "approved") return null;
+    if (a && (a.status === "approved" || a.status === "proposed")) {
+      await tx.update(actions).set({ status: "cancelled" }).where(eq(actions.id, actionId));
+      await writeAudit(tx, {
+        caseId,
+        actor: "executor",
+        kind: "observed",
+        data: { actionId, cancelled: true, reason: `case is ${c?.state ?? "missing"} at execution time` },
+        at: now,
+      });
+    }
+    return {
       caseId,
-      actor: "executor",
-      kind: "observed",
-      data: { actionId, cancelled: true, reason: `case is ${current?.state ?? "missing"} at execution time` },
-      at: now,
-    });
-    return { caseId, outcome: "cancelled", detail: `case is ${current?.state} at execution time` };
-  }
+      outcome: "cancelled",
+      detail: c && !isEndState(c.state) ? `action is ${a?.status}` : `case is ${c?.state} at execution time`,
+    };
+  });
+  if (early) return early;
+  const [current] = await deps.db.select().from(cases).where(eq(cases.id, caseId));
+  if (!current) throw new Error(`case ${caseId} not found`);
 
   // 6.11: the global pause wins even over an action the gate passed a moment ago.
   if (await isSystemPaused(deps.db)) {
@@ -181,7 +218,10 @@ export async function executeAction(deps: LoopDeps, actionId: string, policy: Po
   const action = row.action as Action;
   const message = row.message as Proposal["message"] | null;
   const stage = current.contacts;
-  const key = idempotencyKey(caseId, action, stage);
+  const key =
+    action === "request_balance_capture"
+      ? await captureKey(deps.db, caseId, actionId, stage)
+      : idempotencyKey(caseId, action, stage);
   const nextCheckHours = action === "request_balance_capture" ? 24 : 72;
 
   // 8.5: a customer's "I updated my payment method" buys one retry; it is used up by this attempt.
@@ -197,15 +237,24 @@ export async function executeAction(deps: LoopDeps, actionId: string, policy: Po
       if (!c || isEndState(c.state)) return false;
       await tx
         .update(actions)
-        // The would-be key stays in the record only: the unique column guards real PayPal sends,
-        // and dry runs are not counted as contacts, so the next one has the same stage and key.
+        // The would-be key stays in the record only: the unique column guards real PayPal sends.
         .set({
           status: "executed",
           executedAt: now,
           toolCall: { dryRun: true, ...wouldCall, idempotencyKey: key },
         })
         .where(eq(actions.id, actionId));
-      await setState(tx, caseId, c.state, "executed");
+      // B9: a dry-run contact counts like a live one (contacts, stage, last contact), so a dry run
+      // walks the same stages, spacing, caps and escalation the live loop would.
+      await setState(
+        tx,
+        caseId,
+        c.state,
+        "executed",
+        isContactAction(action)
+          ? { contacts: sql`${cases.contacts} + 1`, stage: sql`${cases.stage} + 1`, lastContactAt: now }
+          : {},
+      );
       await setState(tx, caseId, "executed", "awaiting");
       await scheduleCheck(tx, caseId, new Date(now.getTime() + nextCheckHours * H), "dry run: next check");
       await writeAudit(tx, {
@@ -225,8 +274,9 @@ export async function executeAction(deps: LoopDeps, actionId: string, policy: Po
   let toolCall: Record<string, unknown>;
   let toolResponse: unknown = null;
   try {
-    if (current.lane === "invoice" && current.contacts === 0) {
-      // First contact by Boomerang: stop PayPal's own automatic reminders so the customer hears from one system.
+    if (current.lane === "invoice" && !(await sentLiveBefore(deps.db, caseId))) {
+      // Before Boomerang's first real send, stop PayPal's own automatic reminders so the customer hears
+      // from one system. (Not `contacts === 0`: dry-run contacts count now, and a case may go live after some.)
       await cancelInvoiceAutoReminder(deps.gateway, current.paypalRef, `${caseId}:cancel_auto_reminder`);
     }
     if (action === "send_reminder" || action === "offer_payment_plan") {
@@ -258,10 +308,16 @@ export async function executeAction(deps: LoopDeps, actionId: string, policy: Po
       const c = await lockCase(tx, caseId);
       await tx
         .update(actions)
+        // B1: the key is recorded in the response only. The unique column belongs to the action that
+        // succeeds with it; a retry of this step reuses the key, and the ledger lets it through.
         .set({
           status: "failed",
-          idempotencyKey: key,
-          toolResponse: { error: e.message, status: e.status ?? null, debugId: e.debugId ?? null },
+          toolResponse: {
+            error: e.message,
+            status: e.status ?? null,
+            debugId: e.debugId ?? null,
+            idempotencyKey: key,
+          },
         })
         .where(eq(actions.id, actionId));
       await writeAudit(tx, {
@@ -297,9 +353,21 @@ export async function executeAction(deps: LoopDeps, actionId: string, policy: Po
     if (await recordedBefore(tx, actionId)) return true;
     if (!c) return false;
     const contact = isContactAction(action);
+    // B1: a row written before this fix (a failed attempt) may still hold the key; the send is
+    // recorded either way, with the key in the tool call, rather than failing on the unique column.
+    const [holder] = await tx
+      .select({ id: actions.id })
+      .from(actions)
+      .where(and(eq(actions.idempotencyKey, key), ne(actions.id, actionId)));
     await tx
       .update(actions)
-      .set({ status: "executed", executedAt: now, idempotencyKey: key, toolCall, toolResponse })
+      .set({
+        status: "executed",
+        executedAt: now,
+        idempotencyKey: holder ? null : key,
+        toolCall: { ...toolCall, idempotencyKey: key },
+        toolResponse,
+      })
       .where(eq(actions.id, actionId));
     await writeAudit(tx, {
       caseId,
@@ -330,6 +398,23 @@ export async function executeAction(deps: LoopDeps, actionId: string, policy: Po
   if (duplicate) return { caseId, outcome: "skipped", detail: "already executed by another run" };
   deps.logger?.info({ caseId, action, key }, "action executed");
   return { caseId, outcome: "executed", detail: action };
+}
+
+/** Whether a real (not dry-run) invoice reminder was already sent on this case. */
+async function sentLiveBefore(db: LoopDeps["db"], caseId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: actions.id })
+    .from(actions)
+    .where(
+      and(
+        eq(actions.caseId, caseId),
+        eq(actions.status, "executed"),
+        sql`${actions.toolCall}->>'tool' = 'send_invoice_reminder'`,
+        sql`coalesce(${actions.toolCall}->>'dryRun', 'false') <> 'true'`,
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
 }
 
 function describeCall(

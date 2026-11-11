@@ -90,6 +90,34 @@ function RowActions(
           Pay link
         </button>
       )}
+      {!closed && (
+        <button
+          disabled={busy}
+          title="Record a reply the customer sent outside Boomerang (for example by email)"
+          onClick={() => {
+            const text = window.prompt(`Paste the customer's reply on ${row.paypalRef}:`)?.trim();
+            if (!text) return;
+            const label = window
+              .prompt(
+                "Label (promise, dispute, opt_out, question, other), or leave empty for the classifier:",
+                "",
+              )
+              ?.trim();
+            if (label === undefined) return;
+            const promiseDate =
+              label === "promise"
+                ? window.prompt("Promised payment date (yyyy-mm-dd), or leave empty:", "")?.trim()
+                : undefined;
+            void act(`/api/cases/${row.id}/reply`, {
+              text,
+              ...(label ? { label } : {}),
+              ...(promiseDate ? { promiseDate } : {}),
+            });
+          }}
+        >
+          Log reply
+        </button>
+      )}
       <button onClick={() => props.openAudit(row.id)}>Audit</button>
     </div>
   );

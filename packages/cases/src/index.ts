@@ -15,6 +15,7 @@ export {
   paymentLink,
   paypalPayLink,
   configurePayLinks,
+  configurePayPalWeb,
   messageFacts,
   OPT_OUT_LINE,
   type TemplateId,
@@ -40,6 +41,8 @@ export {
   loadPolicy,
   isSystemPaused,
   setSystemPaused,
+  reportWorkerMode,
+  effectiveMode,
   customerContactsLast7Days,
   MERCHANT_ID,
 } from "./store";

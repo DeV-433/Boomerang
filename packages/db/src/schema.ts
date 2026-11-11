@@ -45,7 +45,14 @@ export const actionStatusEnum = pgEnum("action_status", [
   "failed",
   "cancelled",
 ]);
-export const approvalStatusEnum = pgEnum("approval_status", ["pending", "approved", "edited", "rejected"]);
+/** "cancelled": the case closed (paid, escalated, stopped) while the approval was still waiting. */
+export const approvalStatusEnum = pgEnum("approval_status", [
+  "pending",
+  "approved",
+  "edited",
+  "rejected",
+  "cancelled",
+]);
 export const policyModeEnum = pgEnum("policy_mode", ["dry_run", "live"]);
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -120,6 +127,8 @@ export const cases = pgTable(
     paypalStatus: text("paypal_status"),
     /** Invoices: yyyy-MM-dd due date. */
     dueDate: text("due_date"),
+    /** Invoices: the merchant's invoice number (detail.invoice_number), which PayPal disputes refer to. */
+    invoiceNumber: text("invoice_number"),
     /** Subscriptions: failed payments PayPal has reported in this cycle. */
     failedPayments: integer("failed_payments").notNull().default(0),
     lastFailureReason: text("last_failure_reason"),
@@ -352,6 +361,8 @@ export const jobs = pgTable(
     status: jobStatusEnum("status").notNull().default("pending"),
     reason: text("reason"),
     attempts: integer("attempts").notNull().default(0),
+    /** When a worker claimed the job; a "running" job claimed too long ago belonged to a worker that died. */
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
     lastError: text("last_error"),
     createdAt: createdAt(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
@@ -371,6 +382,12 @@ export const systemState = pgTable("system_state", {
   paused: boolean("paused").notNull().default(false),
   pausedBy: text("paused_by"),
   changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+  /**
+   * The worker's POLICY_MODE, written by the worker at start and on every tick. The API sends an
+   * approved action live only when both it and the worker are live (B15).
+   */
+  workerMode: policyModeEnum("worker_mode"),
+  workerSeenAt: timestamp("worker_seen_at", { withTimezone: true }),
 });
 
 // 5.5 and 5.11: every model call, for the audit trail, cost tracking and reproducible replays ---------

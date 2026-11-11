@@ -43,7 +43,8 @@ describe("a clean proposal", () => {
       effect: { kind: "proceed" },
       policyVersion: 1,
     });
-    expect(d.checks.map((c) => c.rule)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    // Rule 13 (a pending promise) is checked right after the whitelist, before caps and holds.
+    expect(d.checks.map((c) => c.rule)).toEqual([1, 2, 3, 4, 5, 13, 6, 7, 8, 9, 10, 11, 12]);
     expect(d.checks.every((c) => c.passed)).toBe(true);
   });
 });
@@ -292,6 +293,6 @@ describe("rule order (4.11)", () => {
   });
 
   it("the rule list is in documented order", () => {
-    expect(RULES.map((r) => r.rule)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(RULES.map((r) => r.rule)).toEqual([1, 2, 3, 4, 5, 13, 6, 7, 8, 9, 10, 11, 12]);
   });
 });

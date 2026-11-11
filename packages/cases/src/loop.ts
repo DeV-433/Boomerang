@@ -1,10 +1,11 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { auditedTransaction, writeAudit } from "@boomerang/audit";
 import {
+  canTransition,
   isContactAction,
   isEndState,
   isWaitAction,
-  lintMessage,
+  lintFullMessage,
   type Action,
   type Lane,
   type Proposal,
@@ -59,15 +60,82 @@ export interface CheckResult {
 
 const H = 3_600_000;
 
+/** A case left in a mid-check state (proposed, executed) this long is treated as abandoned (B5). */
+export const STUCK_AFTER_MS = 10 * 60_000;
+
+/** Causes that end contact: an approval given earlier no longer applies once one of these holds. */
+const STOP_CAUSES = ["resolved", "dispute", "opted_out"];
+
+/** Everything the decision depended on; if it changed while the proposer ran, the proposal is stale. */
+const fingerprint = (c: { state: string; paused: boolean }, s: CaseSnapshot) =>
+  JSON.stringify({ state: c.state, paused: c.paused, s });
+
+type Approved = typeof actions.$inferSelect & { approvedBy: string | null };
+
+/**
+ * B2: an action a person approved that could not go out at the time (outside contact hours, spacing,
+ * the global pause). It stays "approved" and the next check re-gates it instead of proposing anew.
+ */
+async function carriedApproval(db: LoopDeps["db"], caseId: string): Promise<Approved | null> {
+  const [row] = await db
+    .select({ a: actions, by: approvals.decidedBy })
+    .from(actions)
+    .innerJoin(approvals, eq(approvals.actionId, actions.id))
+    .where(
+      and(
+        eq(actions.caseId, caseId),
+        eq(actions.status, "approved"),
+        inArray(approvals.status, ["approved", "edited"]),
+      ),
+    )
+    .orderBy(desc(actions.createdAt))
+    .limit(1);
+  return row ? { ...row.a, approvedBy: row.by } : null;
+}
+
+function carriedProposal(a: Approved, diagnosis: Diagnosis): Proposal {
+  return {
+    caseId: a.caseId,
+    cause: diagnosis.cause,
+    action: a.action as Action,
+    reason: a.reason ?? "approved by a person",
+    confidence: a.confidence ?? 1,
+    ...(a.message ? { message: a.message as Proposal["message"] } : {}),
+    nextCheckAfterHours: 72,
+    proposedBy: a.proposedBy,
+  };
+}
+
 /**
  * One turn of the common loop (section 7) for one case: close-out and diagnosis, proposal, gate,
  * then either execution, a hold for a person, a deferral, or an end state. Every step is audited.
+ *
+ * B3: the proposer (which may call the model for seconds) runs before any lock is taken. The short
+ * transaction afterwards re-reads the case under its lock and uses the proposal only if nothing it
+ * depended on changed in the meantime; otherwise the case is checked again at once. The gate always
+ * runs on the fresh facts inside the lock.
  */
 export async function runCaseCheck(deps: LoopDeps, caseId: string): Promise<CheckResult> {
   const now = (deps.now ?? (() => new Date()))();
   const policy = await loadPolicy(deps.db, deps.mode);
   const proposer = deps.proposer ?? proposeByRules;
 
+  // 1. Read, without locks.
+  const [c0] = await deps.db.select().from(cases).where(eq(cases.id, caseId));
+  if (!c0 || isEndState(c0.state)) return { caseId, outcome: "skipped", detail: "case has ended" };
+  if (c0.paused) return { caseId, outcome: "skipped", detail: "case paused by operator" };
+  if (c0.state !== "detected" && c0.state !== "awaiting") return recoverStuck(deps, c0, policy, now);
+  const before = (await loadSnapshot(deps.db, caseId, now))!;
+  const diagnosis0 = diagnose(before, now);
+  const carried = await carriedApproval(deps.db, caseId);
+  const useCarried = carried !== null && !STOP_CAUSES.includes(diagnosis0.cause);
+
+  // 2. Propose, outside any transaction.
+  const proposal = useCarried
+    ? carriedProposal(carried, diagnosis0)
+    : await proposer(before, diagnosis0, now);
+
+  // 3. Record, gate and apply, under the locks.
   const step = await auditedTransaction(deps.db, async (tx): Promise<CheckResult & { execute?: string }> => {
     const c = await lockCase(tx, caseId);
     if (!c || isEndState(c.state)) return { caseId, outcome: "skipped", detail: "case has ended" };
@@ -76,7 +144,24 @@ export async function runCaseCheck(deps: LoopDeps, caseId: string): Promise<Chec
       return { caseId, outcome: "skipped", detail: `case is ${c.state}` };
 
     const snapshot = (await loadSnapshot(tx, caseId, now))!;
-    const diagnosis = diagnose(snapshot, now);
+    const carriedNow = useCarried
+      ? (await tx.select().from(actions).where(eq(actions.id, carried.id)).for("update"))[0]
+      : undefined;
+    if (
+      fingerprint(c, snapshot) !== fingerprint(c0, before) ||
+      (useCarried && carriedNow?.status !== "approved")
+    ) {
+      await scheduleCheck(tx, caseId, now, "the case changed while its next step was being decided");
+      return { caseId, outcome: "deferred", detail: "the case changed while deciding; checking again" };
+    }
+    const diagnosis = diagnosis0;
+    if (carried && !useCarried) {
+      // A stop condition arrived after the approval: the approved action is void.
+      await tx
+        .update(actions)
+        .set({ status: "cancelled" })
+        .where(and(eq(actions.id, carried.id), eq(actions.status, "approved")));
+    }
     await setState(tx, caseId, c.state, "diagnosed", { cause: diagnosis.cause });
     await writeAudit(tx, {
       caseId,
@@ -86,26 +171,31 @@ export async function runCaseCheck(deps: LoopDeps, caseId: string): Promise<Chec
       at: now,
     });
 
-    const proposal = await proposer(snapshot, diagnosis, now);
-    const [action] = await tx
-      .insert(actions)
-      .values({
-        caseId,
-        action: proposal.action,
-        proposedBy: proposal.proposedBy,
-        reason: proposal.reason,
-        confidence: proposal.confidence,
-        message: proposal.message ?? null,
-        status: "proposed",
-      })
-      .returning({ id: actions.id });
-    const actionId = action!.id;
+    let actionId: string;
+    if (useCarried) {
+      actionId = carried.id;
+    } else {
+      const [action] = await tx
+        .insert(actions)
+        .values({
+          caseId,
+          action: proposal.action,
+          proposedBy: proposal.proposedBy,
+          reason: proposal.reason,
+          confidence: proposal.confidence,
+          message: proposal.message ?? null,
+          status: "proposed",
+        })
+        .returning({ id: actions.id });
+      actionId = action!.id;
+    }
     await setState(tx, caseId, "diagnosed", "proposed");
     await writeAudit(tx, {
       caseId,
       actor: proposal.proposedBy,
       kind: "proposed",
       data: {
+        ...(useCarried ? { carriedApproval: true, approvedBy: carried.approvedBy } : {}),
         actionId,
         action: proposal.action,
         reason: proposal.reason,
@@ -130,7 +220,7 @@ export async function runCaseCheck(deps: LoopDeps, caseId: string): Promise<Chec
       at: now,
     });
 
-    const decision = await gate(tx, deps, snapshot, proposal, policy, now);
+    const decision = await gate(tx, deps, snapshot, proposal, policy, now, useCarried);
     await tx
       .update(actions)
       .set({
@@ -151,11 +241,12 @@ export async function runCaseCheck(deps: LoopDeps, caseId: string): Promise<Chec
         reasons: decision.reasons,
         checks: decision.checks,
         policyVersion: decision.policyVersion,
+        ...(useCarried ? { afterApproval: true } : {}),
       },
       at: now,
     });
 
-    return applyDecision(tx, caseId, actionId, proposal, decision, now);
+    return applyDecision(tx, caseId, actionId, proposal, decision, now, useCarried);
   });
 
   if (step.execute) {
@@ -185,9 +276,10 @@ async function gate(
     contactsOnCase: s.contacts,
     customerContactsLast7Days: s.customerContactsLast7Days,
     lastContactAt: s.lastContactAt,
+    promiseDate: s.promiseDate,
     proposal,
-    // Every outgoing message is linted against the case's own facts (5.8), whoever drafted it.
-    messageLint: proposal.message ? lintMessage(proposal.message.body, messageFacts(s)) : undefined,
+    // Every outgoing message, subject included, is linted against the case's own facts (5.8, B13).
+    messageLint: proposal.message ? lintFullMessage(proposal.message, messageFacts(s)) : undefined,
     redrafted: proposal.meta?.draft?.redrafted ?? false,
     approvedByHuman,
     systemPaused: await isSystemPaused(tx),
@@ -204,6 +296,8 @@ async function applyDecision(
   proposal: Proposal,
   decision: GateDecision,
   now: Date,
+  /** B2: the action is one a person approved earlier; a deferral keeps it approved. */
+  carried = false,
 ): Promise<CheckResult & { execute?: string }> {
   const effect = decision.effect;
   const setAction = (status: "blocked" | "held" | "approved" | "executed" | "cancelled") =>
@@ -226,7 +320,7 @@ async function applyDecision(
     case "pause":
     case "retry_at": {
       const at = effect.kind === "retry_at" ? effect.at : new Date(now.getTime() + 15 * 60_000);
-      await setAction(decision.verdict === "hold" ? "held" : "blocked");
+      await setAction(carried ? "approved" : decision.verdict === "hold" ? "held" : "blocked");
       await setState(tx, caseId, "proposed", "awaiting");
       await scheduleCheck(tx, caseId, at, `gate rule ${decision.decidedBy}: ${reason}`);
       await writeAudit(tx, {
@@ -242,7 +336,14 @@ async function applyDecision(
     case "redraft": {
       // Rule-based drafts never fail lint; until 5.8 a redraft request is treated as a hold for a person.
       await setAction("held");
-      await tx.insert(approvals).values({ actionId, status: "pending" });
+      // A carried action already has its approval row: it goes back to the queue.
+      await tx
+        .insert(approvals)
+        .values({ actionId, status: "pending" })
+        .onConflictDoUpdate({
+          target: approvals.actionId,
+          set: { status: "pending", decidedBy: null, decidedAt: null, note: null },
+        });
       await setState(tx, caseId, "proposed", "approval");
       await writeAudit(tx, {
         caseId,
@@ -372,6 +473,8 @@ export async function decideApproval(
     if (regate.effect.kind === "retry_at" || regate.effect.kind === "pause") {
       // Approved, but not now (for example outside contact hours): keep the approval and retry later.
       const at = regate.effect.kind === "retry_at" ? regate.effect.at : new Date(now.getTime() + 15 * 60_000);
+      // B2: the action stays approved; the next check re-gates it rather than proposing a new one.
+      await tx.update(actions).set({ status: "approved" }).where(eq(actions.id, actionId));
       await setState(tx, row.caseId, "approval", "awaiting");
       await scheduleCheck(tx, row.caseId, at, `approved; ${regate.reasons[0]}`);
       return { caseId: row.caseId, outcome: "deferred", detail: regate.reasons[0] };
@@ -387,6 +490,72 @@ export async function decideApproval(
   });
   if (step.execute) return executeAction(deps, step.execute, policy);
   return step;
+}
+
+/**
+ * B5: a case found in a mid-check state. "approval" waits for a person. "proposed" or "executed"
+ * outside a running check means the process that held it died (a crash, a deploy restart) or a
+ * record failed: after STUCK_AFTER_MS an action the gate already allowed is executed (the
+ * idempotency ledger keeps that to one PayPal call), anything else goes back to "awaiting" and is
+ * checked again now. Younger than that, the case is looked at again once it would count as stuck.
+ */
+async function recoverStuck(
+  deps: LoopDeps,
+  c: typeof cases.$inferSelect,
+  policy: Policy,
+  now: Date,
+): Promise<CheckResult> {
+  if (c.state === "approval")
+    return { caseId: c.id, outcome: "skipped", detail: "waiting for a person's approval" };
+  const age = now.getTime() - c.updatedAt.getTime();
+  if (age < STUCK_AFTER_MS) {
+    await auditedTransaction(deps.db, async (tx) => {
+      const locked = await lockCase(tx, c.id);
+      if (locked && !isEndState(locked.state) && locked.state === c.state)
+        await scheduleCheck(
+          tx,
+          c.id,
+          new Date(c.updatedAt.getTime() + STUCK_AFTER_MS),
+          `case is ${c.state}; looking again if it stays there`,
+        );
+    });
+    return { caseId: c.id, outcome: "skipped", detail: `case is ${c.state}` };
+  }
+  const [last] = await deps.db
+    .select()
+    .from(actions)
+    .where(eq(actions.caseId, c.id))
+    .orderBy(desc(actions.createdAt))
+    .limit(1);
+  if (c.state === "proposed" && last?.status === "approved") {
+    await writeAudit(deps.db, {
+      caseId: c.id,
+      actor: "worker",
+      kind: "observed",
+      data: { recovered: true, fromState: c.state, actionId: last.id, resumed: "execution" },
+      at: now,
+    });
+    return executeAction(deps, last.id, policy);
+  }
+  await auditedTransaction(deps.db, async (tx) => {
+    const locked = await lockCase(tx, c.id);
+    if (!locked || isEndState(locked.state) || locked.state !== c.state) return;
+    if (canTransition(locked.state, "awaiting")) await setState(tx, c.id, locked.state, "awaiting");
+    await scheduleCheck(tx, c.id, now, `recovered from a stuck ${c.state} state`);
+    await writeAudit(tx, {
+      caseId: c.id,
+      actor: "worker",
+      kind: "observed",
+      data: {
+        recovered: true,
+        fromState: c.state,
+        lastAction: last?.id ?? null,
+        lastStatus: last?.status ?? null,
+      },
+      at: now,
+    });
+  });
+  return { caseId: c.id, outcome: "deferred", detail: `recovered from a stuck ${c.state} state` };
 }
 
 /**

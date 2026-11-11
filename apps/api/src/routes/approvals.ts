@@ -8,7 +8,7 @@ import type {
   DraftMessage,
   Proposal,
 } from "@boomerang/core";
-import { decideApproval, lintEditedMessage } from "@boomerang/cases";
+import { decideApproval, effectiveMode, lintEditedMessage } from "@boomerang/cases";
 import { actions, approvals, approvalStatusEnum, cases, customers, events } from "@boomerang/db";
 import type { AppDeps } from "../app";
 import { OPERATOR_ACTOR } from "./cases";
@@ -150,7 +150,7 @@ export async function approvalRoutes(app: FastifyInstance, deps: AppDeps): Promi
     if (d.decision === "edit") {
       const original = row.ac.message as DraftMessage | null;
       if (!original) return reply.code(409).send({ error: "this action has no message to edit" });
-      const lint = await lintEditedMessage(db, row.ac.id, d.message!.body);
+      const lint = await lintEditedMessage(db, row.ac.id, d.message!.body, d.message!.subject);
       if (!lint.ok)
         return lint.status === 422
           ? reply
@@ -166,8 +166,10 @@ export async function approvalRoutes(app: FastifyInstance, deps: AppDeps): Promi
       };
     }
 
+    // B15: live only when the API and the worker both run live.
+    const { mode } = await effectiveMode(db, deps.policyMode ?? "dry_run");
     const result = await decideApproval(
-      { db, gateway: deps.gateway, mode: deps.policyMode, logger: deps.logger, now: deps.now },
+      { db, gateway: deps.gateway, mode, logger: deps.logger, now: deps.now },
       row.ac.id,
       {
         approve: d.decision !== "reject",

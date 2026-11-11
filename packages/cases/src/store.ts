@@ -1,7 +1,16 @@
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { auditedTransaction, writeAudit } from "@boomerang/audit";
 import { isEndState, transition, type CaseState } from "@boomerang/core";
-import { actions, cases, customers, jobs, policies, systemState, type Database } from "@boomerang/db";
+import {
+  actions,
+  approvals,
+  cases,
+  customers,
+  jobs,
+  policies,
+  systemState,
+  type Database,
+} from "@boomerang/db";
 import { DEFAULT_POLICY, type Policy } from "@boomerang/policy";
 import type { CaseSnapshot } from "./diagnose";
 
@@ -31,7 +40,11 @@ export async function setState(
     .where(eq(cases.id, caseId));
 }
 
-/** Customer-facing messages to this customer in the 7 days before `now`, across all their cases. */
+/**
+ * Customer-facing messages to this customer in the 7 days before `now`, across all their cases.
+ * B9: dry runs count too, so a dry run walks the same stages, caps and spacing a live run would
+ * (after a switch to live, the week before is counted conservatively).
+ */
 export async function customerContactsLast7Days(db: Db, customerId: string, now: Date): Promise<number> {
   const since = new Date(now.getTime() - 7 * 24 * 3_600_000);
   const [row] = await db
@@ -44,7 +57,6 @@ export async function customerContactsLast7Days(db: Db, customerId: string, now:
         eq(actions.status, "executed"),
         inArray(actions.action, ["send_reminder", "offer_payment_plan", "send_update_payment_message"]),
         gte(actions.executedAt, since),
-        sql`coalesce(${actions.toolCall}->>'dryRun', 'false') <> 'true'`,
       ),
     );
   return row?.n ?? 0;
@@ -99,8 +111,14 @@ export async function scheduleCheck(tx: Tx, caseId: string, runAt: Date, reason:
 }
 
 /**
- * Ends a case: final state, close reason, recovered amount, pending jobs cancelled, audit entry.
- * No-op if the case already ended (end states are final; a late event cannot reopen or recount it).
+ * Ends a case: final state, close reason, recovered amount, pending jobs and approvals cancelled,
+ * audit entry. No-op if the case already ended (end states are final; a late event cannot reopen
+ * or recount it).
+ *
+ * B12: while a case is open, `recoveredCents` holds partial payments already received and
+ * `amountCents` what is still due. At close the case's amount goes back to the original total, and
+ * money that came in is never zeroed: a recovered case counts everything, any other end keeps the
+ * partial payments.
  */
 export async function closeCase(
   tx: Tx,
@@ -112,23 +130,51 @@ export async function closeCase(
 ): Promise<boolean> {
   const current = await lockCase(tx, caseId);
   if (!current || isEndState(current.state)) return false;
-  const recoveredCents = endState === "recovered" ? (options.recoveredCents ?? current.amountCents) : 0;
+  const total = current.amountCents + current.recoveredCents;
+  const recoveredCents =
+    endState === "recovered" ? (options.recoveredCents ?? total) : current.recoveredCents;
+  const at = options.at ?? new Date();
   await setState(tx, caseId, current.state, endState, {
-    closedAt: options.at ?? new Date(),
+    closedAt: at,
     closeReason: reason,
+    amountCents: total,
     recoveredCents,
     nextCheckAt: null,
   });
-  await tx
+  const cancelled = await tx
     .update(actions)
     .set({ status: "cancelled" })
-    .where(and(eq(actions.caseId, caseId), inArray(actions.status, ["proposed", "held", "approved"])));
+    .where(and(eq(actions.caseId, caseId), inArray(actions.status, ["proposed", "held", "approved"])))
+    .returning({ id: actions.id });
+  // B10: an approval still waiting for a person is moot once the case is closed.
+  const cancelledApprovals = cancelled.length
+    ? await tx
+        .update(approvals)
+        .set({ status: "cancelled", decidedBy: actor, decidedAt: at, note: `case ${endState}: ${reason}` })
+        .where(
+          and(
+            inArray(
+              approvals.actionId,
+              cancelled.map((a) => a.id),
+            ),
+            eq(approvals.status, "pending"),
+          ),
+        )
+        .returning({ id: approvals.id })
+    : [];
   const cancelledJobs = await cancelJobs(tx, caseId);
   await writeAudit(tx, {
     caseId,
     actor,
     kind: "closed",
-    data: { endState, reason, recoveredCents, fromState: current.state, cancelledJobs },
+    data: {
+      endState,
+      reason,
+      recoveredCents,
+      fromState: current.state,
+      cancelledJobs,
+      ...(cancelledApprovals.length ? { cancelledApprovals: cancelledApprovals.length } : {}),
+    },
     at: options.at,
   });
   return true;
@@ -172,6 +218,40 @@ export async function loadPolicy(db: Database, modeOverride?: "dry_run" | "live"
 export async function isSystemPaused(db: Db): Promise<boolean> {
   const [row] = await db.select().from(systemState).where(eq(systemState.id, 1));
   return row?.paused ?? false;
+}
+
+/** B15: the worker records its POLICY_MODE (at start and on every tick) for the API to read. */
+export async function reportWorkerMode(db: Database, mode: "dry_run" | "live"): Promise<void> {
+  await db
+    .insert(systemState)
+    .values({ id: 1, workerMode: mode, workerSeenAt: sql`now()` })
+    .onConflictDoUpdate({ target: systemState.id, set: { workerMode: mode, workerSeenAt: sql`now()` } });
+}
+
+/**
+ * B15: the mode an approved action runs in when the API executes it. Live only when the API and the
+ * worker are both live, so an API left in live mode cannot send while the worker is in a dry run.
+ */
+export async function effectiveMode(
+  db: Db,
+  apiMode: "dry_run" | "live",
+): Promise<{
+  mode: "dry_run" | "live";
+  apiMode: "dry_run" | "live";
+  workerMode: "dry_run" | "live" | null;
+  workerSeenAt: Date | null;
+}> {
+  const [row] = await db
+    .select({ workerMode: systemState.workerMode, workerSeenAt: systemState.workerSeenAt })
+    .from(systemState)
+    .where(eq(systemState.id, 1));
+  const workerMode = row?.workerMode ?? null;
+  return {
+    mode: apiMode === "live" && workerMode === "live" ? "live" : "dry_run",
+    apiMode,
+    workerMode,
+    workerSeenAt: row?.workerSeenAt ?? null,
+  };
 }
 
 export async function setSystemPaused(db: Database, paused: boolean, by: string): Promise<void> {

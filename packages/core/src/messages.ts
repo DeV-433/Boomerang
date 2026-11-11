@@ -157,6 +157,38 @@ export function lintMessage(body: string, facts: MessageFacts): LintResult {
   return { ok: issues.length === 0, issues: [...new Set(issues)] };
 }
 
+/**
+ * B13: the subject line carries none of the required facts, but it must not smuggle in what the
+ * body may not say: threats, pressure, a deadline, a link, a percentage, another amount or a date.
+ */
+export function lintSubject(subject: string, facts: MessageFacts): LintResult {
+  const issues: string[] = [];
+  const allowedMoney = normalizeMoney(facts.amount);
+  for (const m of subject.match(MONEY) ?? []) {
+    if (normalizeMoney(m) !== allowedMoney) issues.push(`subject invents an amount: "${m.trim()}"`);
+  }
+  if ((subject.match(URL) ?? []).length > 0) issues.push("subject contains a link");
+  if (PERCENT.test(subject)) issues.push("subject mentions a percentage");
+  for (const d of subject.match(DATE) ?? []) {
+    if (!facts.promiseDate || !sameDay(d, facts.promiseDate))
+      issues.push(`subject mentions a date that is not the customer's promised date: "${d}"`);
+  }
+  if (DEADLINE.test(subject)) issues.push("subject sets a deadline that is not in the case data");
+  for (const [re, why] of FORBIDDEN) if (re.test(subject)) issues.push(`subject ${why}`);
+  return { ok: issues.length === 0, issues: [...new Set(issues)] };
+}
+
+/** Body and subject together: what the gate (rule 11) and the approval editor check. */
+export function lintFullMessage(
+  message: { subject?: string; body: string },
+  facts: MessageFacts,
+): LintResult {
+  const body = lintMessage(message.body, facts);
+  const subject = message.subject ? lintSubject(message.subject, facts) : { ok: true, issues: [] };
+  const issues = [...body.issues, ...subject.issues];
+  return { ok: issues.length === 0, issues };
+}
+
 function sameDay(mention: string, iso: string): boolean {
   if (/^\d{4}-\d{2}-\d{2}$/.test(mention)) return mention === iso;
   const parsed = new Date(`${mention.replace(/(st|nd|rd|th)\b/, "")} ${iso.slice(0, 4)} 12:00 UTC`);

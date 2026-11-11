@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import { processPendingEvents, runCaseCheck } from "@boomerang/cases";
+import { processPendingEvents, reportWorkerMode, runCaseCheck } from "@boomerang/cases";
 import { payLinkExpiry, signPayLink } from "@boomerang/core";
 import { actions, approvals, auditLog, cases, type DbHandle } from "@boomerang/db";
 import { hasTestDb, setupTestDb } from "@boomerang/db/testing";
@@ -34,6 +34,8 @@ describe.skipIf(!hasTestDb)("manual retry after a payment update, as a gated cap
 
   beforeAll(async () => {
     h = await setupTestDb();
+    // B15: the API sends live only when the worker reports live as well.
+    await reportWorkerMode(h.db, "live");
     app = await buildApp({
       db: h,
       verifier: { verify: async () => ({ verified: true }) },

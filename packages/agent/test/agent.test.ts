@@ -396,6 +396,35 @@ describe.skipIf(!hasTestDb)("reply classification in the loop (5.9 wiring)", () 
     await h?.close();
   });
 
+  it("B4: an unreachable classifier leaves the reply for later instead of failing the worker", async () => {
+    const { classifyPendingReplies } = await import("../src/replies");
+    const id = `WH-REPLY-${randomUUID()}`;
+    const payload = {
+      id,
+      event_type: "BOOMERANG.CUSTOMER.REPLY",
+      resource: { paypal_ref: "INV2-NOPE", lane: "invoice", text: "I will pay Friday" },
+    };
+    await h.db.insert(events).values({
+      paypalEventId: id,
+      type: payload.event_type,
+      payload,
+      rawBody: JSON.stringify(payload),
+      headers: {},
+    });
+    const down: ModelClient = {
+      generate: async () => {
+        throw new ModelCallError("Groq daily token limit reached", true, 60_000);
+      },
+    };
+    await expect(classifyPendingReplies(h.db, down, { now: () => NOW })).resolves.toBe(0);
+    const [stored] = await h.db.select().from(events).where(eq(events.paypalEventId, id));
+    expect(
+      (stored!.payload as { resource: { classification?: unknown } }).resource.classification,
+    ).toBeUndefined();
+    expect(stored!.processedAt).toBeNull();
+    await h.db.update(events).set({ processedAt: NOW }).where(eq(events.paypalEventId, id));
+  });
+
   it("labels a raw-text reply before the case opener acts on it, and only the label reaches the case", async () => {
     const { classifyPendingReplies } = await import("../src/replies");
     const r = randomUUID().replace(/-/g, "").toUpperCase();

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { auditedTransaction, writeAudit } from "@boomerang/audit";
 import type { Logger } from "@boomerang/core";
 import { cases, customers, events, type Database } from "@boomerang/db";
@@ -26,7 +26,7 @@ interface SubscriptionResource {
 interface InvoiceResource {
   id?: string;
   status?: string;
-  detail?: { currency_code?: string; payment_term?: { due_date?: string } };
+  detail?: { currency_code?: string; invoice_number?: string; payment_term?: { due_date?: string } };
   primary_recipients?: { billing_info?: { email_address?: string; name?: { full_name?: string } } }[];
   amount?: Money;
   due_amount?: Money;
@@ -64,7 +64,9 @@ async function observed(ctx: Ctx, caseId: string, data: Record<string, unknown>)
         ? "poller"
         : ctx.event.source === "paypage"
           ? "customer:paypage"
-          : "paypal",
+          : ctx.event.source === "operator"
+            ? "operator"
+            : "paypal",
     kind: "event_received",
     data: {
       eventId: ctx.event.paypalEventId,
@@ -191,12 +193,19 @@ async function onSubscriptionCancelled(ctx: Ctx): Promise<string | null> {
   const r = resourceOf<SubscriptionResource>(ctx.event);
   const open = r.id ? await openCaseFor(ctx.tx, "subscription", r.id) : null;
   if (!open) return null;
-  const balance = toCents(r.billing_info?.outstanding_balance?.value);
+  // B12: an event without billing_info says nothing about the balance; keep what the case knows
+  // instead of reading "nothing owing" into a missing field.
+  const reported = r.billing_info?.outstanding_balance?.value;
+  const balance = reported === undefined ? open.amountCents : toCents(reported);
   await ctx.tx
     .update(cases)
     .set({ paypalStatus: "CANCELLED", amountCents: balance, updatedAt: sql`now()` })
     .where(eq(cases.id, open.id));
-  await observed(ctx, open.id, { paypalStatus: "CANCELLED", outstandingCents: balance });
+  await observed(ctx, open.id, {
+    paypalStatus: "CANCELLED",
+    outstandingCents: balance,
+    balanceReported: reported !== undefined,
+  });
   if (balance === 0)
     await closeCase(ctx.tx, open.id, "stopped", "subscription cancelled with nothing owing", "paypal", {
       at: ctx.now,
@@ -220,7 +229,6 @@ async function onSaleCompleted(ctx: Ctx): Promise<string | null> {
     paid: r.amount?.total ?? null,
   });
   await closeCase(ctx.tx, open.id, "recovered", "subscription payment completed", "paypal", {
-    recoveredCents: open.amountCents,
     at: ctx.now,
   });
   return open.id;
@@ -237,20 +245,26 @@ async function onInvoiceStatus(ctx: Ctx): Promise<string | null> {
   const due = inv.due_amount ? toCents(inv.due_amount.value) : null;
   await ctx.tx
     .update(cases)
-    .set({ paypalStatus: status || open.paypalStatus, updatedAt: sql`now()` })
+    .set({
+      paypalStatus: status || open.paypalStatus,
+      ...(inv.detail?.invoice_number ? { invoiceNumber: inv.detail.invoice_number } : {}),
+      updatedAt: sql`now()`,
+    })
     .where(eq(cases.id, open.id));
   await observed(ctx, open.id, { invoiceId: inv.id, paypalStatus: status, dueCents: due });
 
   if (PAID_STATUSES.includes(status)) {
     // INVOICING.INVOICE.PAID also fires for a payment made and pending; PayPal reports that as PAYMENT_PENDING.
-    await closeCase(ctx.tx, open.id, "recovered", `PayPal reports ${status}`, "paypal", {
-      recoveredCents: open.amountCents,
-      at: ctx.now,
-    });
+    // Recovered: any partial payments already received plus the rest (closeCase's default).
+    await closeCase(ctx.tx, open.id, "recovered", `PayPal reports ${status}`, "paypal", { at: ctx.now });
   } else if (CLOSED_UNPAID_STATUSES.includes(status)) {
     await closeCase(ctx.tx, open.id, "stopped", `invoice ${status.toLowerCase()}`, "paypal", { at: ctx.now });
   } else if (status === "PARTIALLY_PAID" && due !== null && due < open.amountCents) {
-    await ctx.tx.update(cases).set({ amountCents: due }).where(eq(cases.id, open.id));
+    // B12: the part paid is recovered money; what is left is what reminders ask for.
+    await ctx.tx
+      .update(cases)
+      .set({ amountCents: due, recoveredCents: open.recoveredCents + (open.amountCents - due) })
+      .where(eq(cases.id, open.id));
   }
   return open.id;
 }
@@ -260,7 +274,11 @@ async function onInvoiceOverdue(ctx: Ctx): Promise<string | null> {
   const inv = invoiceOf(ctx.event);
   if (!inv.id) return null;
   const open = await openCaseFor(ctx.tx, "invoice", inv.id);
-  const facts = { paypalStatus: inv.status ?? "SENT", dueDate: inv.detail?.payment_term?.due_date ?? null };
+  const facts = {
+    paypalStatus: inv.status ?? "SENT",
+    dueDate: inv.detail?.payment_term?.due_date ?? null,
+    invoiceNumber: inv.detail?.invoice_number ?? null,
+  };
   if (open) {
     await ctx.tx
       .update(cases)
@@ -293,7 +311,9 @@ async function onInvoiceOverdue(ctx: Ctx): Promise<string | null> {
 
 /**
  * A dispute stops all contact and goes to a person. PayPal's dispute resource identifies the
- * transaction, not the invoice, so the case is found through the invoice number or id it carries.
+ * transaction, not the invoice: it carries the merchant's invoice number (detail.invoice_number,
+ * for example "0042"), not PayPal's invoice id. B7: the case is found by its stored invoice number,
+ * or by its PayPal id when the dispute carries that (custom field or a test event).
  */
 async function onDispute(ctx: Ctx): Promise<string | null> {
   const r = resourceOf<{
@@ -307,7 +327,9 @@ async function onDispute(ctx: Ctx): Promise<string | null> {
   const [open] = await ctx.tx
     .select()
     .from(cases)
-    .where(and(inArray(cases.paypalRef, refs), isNull(cases.closedAt)))
+    .where(
+      and(or(inArray(cases.paypalRef, refs), inArray(cases.invoiceNumber, refs)), isNull(cases.closedAt)),
+    )
     .limit(1);
   if (!open) return null;
   await ctx.tx

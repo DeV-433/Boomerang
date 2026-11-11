@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { actions, cases, type Database } from "@boomerang/db";
 import { auditedTransaction, writeAudit } from "@boomerang/audit";
-import { isEndState, lintMessage } from "@boomerang/core";
+import { isEndState, lintFullMessage } from "@boomerang/core";
 import { messageFacts } from "./messages";
 import { closeCase, loadSnapshot, lockCase, scheduleCheck } from "./store";
 
@@ -53,11 +53,13 @@ export async function escalateCase(
 /**
  * Step 6.9: an operator's edited draft must pass the same lint as any other message (amount,
  * reference, payment link, opt-out line, no invented amounts or links) before it can be approved.
+ * B13: an edited subject is checked too (no threats, links, deadlines or invented facts).
  */
 export async function lintEditedMessage(
   db: Database,
   actionId: string,
   body: string,
+  subject?: string,
 ): Promise<
   { ok: true } | { ok: false; status: 404; error: string } | { ok: false; status: 422; issues: string[] }
 > {
@@ -65,6 +67,6 @@ export async function lintEditedMessage(
   if (!row) return { ok: false, status: 404, error: "action not found" };
   const snapshot = await loadSnapshot(db, row.caseId, new Date());
   if (!snapshot) return { ok: false, status: 404, error: "case not found" };
-  const lint = lintMessage(body, messageFacts(snapshot));
+  const lint = lintFullMessage({ body, subject }, messageFacts(snapshot));
   return lint.ok ? { ok: true } : { ok: false, status: 422, issues: lint.issues };
 }
